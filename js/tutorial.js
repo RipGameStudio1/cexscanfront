@@ -10,7 +10,9 @@ let tutorialState = {
     stepCompleted: false,   // Выполнен ли текущий шаг
     userId: null,           // ID пользователя для сохранения прогресса
     isMobile: false,        // Мобильное ли устройство
-    completedTutorial: false // Завершил ли пользователь обучение ранее
+    completedTutorial: false, // Завершил ли пользователь обучение ранее
+    highlightedElements: [], // Массив для отслеживания подсвеченных элементов
+    scrollHandler: null      // Обработчик прокрутки для обновления позиций
 };
 
 // Определение шагов обучения - интерактивные задачи
@@ -253,6 +255,19 @@ function openMobileFilters() {
     return 0;
 }
 
+// Функция debounce для оптимизации частых вызовов
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
 // Основные функции модуля
 export function initializeTutorial() {
     // Проверка, нужно ли показывать обучение
@@ -277,13 +292,12 @@ export function initializeTutorial() {
     }
     
     // Отслеживание изменения размера окна
-    window.addEventListener('resize', () => {
+    window.addEventListener('resize', debounce(() => {
         tutorialState.isMobile = window.innerWidth <= 768;
         if (tutorialState.isActive) {
-            // Перепозиционирование элементов обучения
             updateTutorialUI();
         }
-    });
+    }, 200));
 }
 
 export function startTutorial() {
@@ -291,18 +305,70 @@ export function startTutorial() {
     tutorialState.isActive = true;
     tutorialState.currentStep = 0;
     tutorialState.stepCompleted = false;
+    tutorialState.highlightedElements = [];
     
     // Создание UI обучения
     createTutorialUI();
     
+    // Добавление обработчика скролла для актуализации позиции подсветки
+    setupScrollHandler();
+    
     // Показ первого шага
     showTutorialStep(0);
+}
+
+// Публичный метод для полного перезапуска обучения
+export function restartTutorial() {
+    // Полностью очищаем UI обучения
+    removeTutorialUI();
+    
+    // Сбрасываем состояние
+    tutorialState.isActive = false;
+    tutorialState.currentStep = 0;
+    tutorialState.stepCompleted = false;
+    tutorialState.highlightedElements = [];
+    
+    // Небольшая задержка для гарантии очистки
+    setTimeout(() => {
+        startTutorial();
+    }, 500);
+}
+
+// Добавляем обработчик прокрутки для обновления позиций элементов обучения
+function setupScrollHandler() {
+    // Очищаем предыдущий обработчик, если он был
+    if (tutorialState.scrollHandler) {
+        window.removeEventListener('scroll', tutorialState.scrollHandler);
+    }
+    
+    // Создаем новый обработчик с debounce для производительности
+    tutorialState.scrollHandler = debounce(() => {
+        if (tutorialState.isActive) {
+            updateTutorialUI();
+        }
+    }, 100);
+    
+    // Добавляем обработчик
+    window.addEventListener('scroll', tutorialState.scrollHandler, { passive: true });
+}
+
+// Удаление обработчика прокрутки
+function removeScrollHandler() {
+    if (tutorialState.scrollHandler) {
+        window.removeEventListener('scroll', tutorialState.scrollHandler);
+        tutorialState.scrollHandler = null;
+    }
 }
 
 // Добавление кнопки запуска обучения
 function addTutorialButton() {
     const filterPanel = document.querySelector('.filter-panel');
     if (!filterPanel) return;
+    
+    // Проверяем, существует ли уже кнопка
+    if (document.querySelector('.tutorial-button-container')) {
+        return;
+    }
     
     const tutorialButton = document.createElement('button');
     tutorialButton.className = 'tutorial-button';
@@ -367,8 +433,8 @@ function addTutorialStyles() {
             right: 0;
             bottom: 0;
             background-color: rgba(0, 0, 0, 0.5);
-            z-index: 9998;
-            pointer-events: none;
+            z-index: 9998 !important;
+            pointer-events: none !important;
         }
         
         .tutorial-spotlight {
@@ -376,7 +442,7 @@ function addTutorialStyles() {
             box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7);
             border-radius: 4px;
             pointer-events: none;
-            z-index: 9999;
+            z-index: 9999 !important;
             transition: all 0.3s ease;
         }
         
@@ -386,10 +452,11 @@ function addTutorialStyles() {
             border-radius: var(--border-radius);
             box-shadow: var(--shadow-md);
             padding: 16px;
-            z-index: 10000;
+            z-index: 10001 !important;
             min-width: 250px;
             max-width: 350px;
             animation: fadeIn 0.3s ease;
+            pointer-events: auto !important;
         }
         
         .tutorial-tooltip-title {
@@ -447,7 +514,7 @@ function addTutorialStyles() {
         
         /* Анимации */
         @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(41, 98, 255, 0.4), 0 0 0 9999px rgba(0, 0, 0, 0.7); }
+            0% { box-shadow: 0 0 0 0 rgba(41, 98, 255, 0.7), 0 0 0 9999px rgba(0, 0, 0, 0.7); }
             70% { box-shadow: 0 0 0 10px rgba(41, 98, 255, 0), 0 0 0 9999px rgba(0, 0, 0, 0.7); }
             100% { box-shadow: 0 0 0 0 rgba(41, 98, 255, 0), 0 0 0 9999px rgba(0, 0, 0, 0.7); }
         }
@@ -460,6 +527,18 @@ function addTutorialStyles() {
         
         .tutorial-spotlight.pulse {
             animation: pulse 1.5s infinite;
+        }
+        
+        /* Анимация окончания обучения */
+        .tutorial-ending {
+            transition: opacity 0.3s ease;
+            opacity: 0;
+        }
+        
+        /* Нормализация z-index */
+        .view-controls {
+            position: relative;
+            z-index: 1;  /* Низкий z-index в обычном состоянии */
         }
         
         /* Мобильные адаптации */
@@ -515,7 +594,7 @@ function createTutorialUI() {
     document.body.appendChild(tooltip);
 }
 
-// Удаление UI обучения
+// Удаление UI обучения и очистка состояний
 function removeTutorialUI() {
     const overlay = document.querySelector('.tutorial-overlay');
     const spotlight = document.querySelector('.tutorial-spotlight');
@@ -524,6 +603,71 @@ function removeTutorialUI() {
     if (overlay) overlay.remove();
     if (spotlight) spotlight.remove();
     if (tooltip) tooltip.remove();
+    
+    // Очищаем стили у подсвеченных элементов
+    clearHighlightedElements();
+    
+    // Восстанавливаем нормальное состояние интерфейса
+    restoreUIState();
+    
+    // Удаляем обработчик прокрутки
+    removeScrollHandler();
+}
+
+// Очистка стилей у ранее подсвеченных элементов
+function clearHighlightedElements() {
+    tutorialState.highlightedElements.forEach(element => {
+        if (element && element.style) {
+            element.style.position = '';
+            element.style.zIndex = '';
+            element.style.pointerEvents = '';
+            element.classList.remove('highlight-tutorial');
+        }
+    });
+    
+    tutorialState.highlightedElements = [];
+    
+    // Принудительно очищаем стили для view-controls
+    const viewControls = document.querySelector('.view-controls');
+    if (viewControls) {
+        viewControls.style.position = '';
+        viewControls.style.zIndex = '';
+        
+        // Очищаем стили для дочерних элементов
+        const viewButtons = viewControls.querySelectorAll('.view-btn');
+        viewButtons.forEach(button => {
+            button.style.position = '';
+            button.style.zIndex = '';
+            button.style.pointerEvents = '';
+        });
+    }
+}
+
+// Восстановление нормального состояния UI
+function restoreUIState() {
+    // Получаем все основные элементы интерфейса, которые могли быть изменены
+    const elementsToReset = [
+        '.view-controls',
+        '.view-btn',
+        '.sort-btn',
+        '.interval-btn',
+        '.coin-tag',
+        '.exchange-tag',
+        '.all-coins-btn',
+        '.all-exchanges-btn'
+    ];
+    
+    // Очищаем стили для всех этих элементов
+    elementsToReset.forEach(selector => {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach(element => {
+            if (element) {
+                element.style.position = '';
+                element.style.zIndex = '';
+                element.style.pointerEvents = '';
+            }
+        });
+    });
 }
 
 // Показ шага обучения
@@ -532,6 +676,9 @@ async function showTutorialStep(stepIndex) {
         completeTutorial();
         return;
     }
+    
+    // Очищаем стили предыдущих элементов перед переходом к новому шагу
+    clearHighlightedElements();
     
     tutorialState.currentStep = stepIndex;
     tutorialState.stepCompleted = false;
@@ -595,6 +742,9 @@ async function showTutorialStep(stepIndex) {
         // Даем время на прокрутку
         await new Promise(resolve => setTimeout(resolve, 300));
         
+        // Сохраняем ссылки на элементы для последующей очистки
+        tutorialState.highlightedElements = [...targetElements];
+        
         // Подсвечиваем элемент(ы)
         if (targetElements.length === 1) {
             highlightElement(primaryElement, step);
@@ -613,27 +763,45 @@ async function showTutorialStep(stepIndex) {
 
 // Функция для прокрутки к элементу
 function scrollToElement(element) {
-    // Получаем позицию элемента
-    const rect = element.getBoundingClientRect();
-    const isInViewport = (
-        rect.top >= 0 &&
-        rect.left >= 0 &&
-        rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-        rect.right <= (window.innerWidth || document.documentElement.clientWidth)
-    );
+    if (!element) return;
     
-    // Если элемент не полностью видим, прокручиваем к нему
-    if (!isInViewport) {
-        element.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center'
-        });
+    try {
+        // Получаем позицию элемента
+        const rect = element.getBoundingClientRect();
+        
+        // Проверяем, виден ли элемент полностью в области просмотра
+        const isInViewport = (
+            rect.top >= 50 && // Учитываем верхний отступ для хедера
+            rect.left >= 0 &&
+            rect.bottom <= (window.innerHeight - 50) && // Учитываем нижний отступ
+            rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+        );
+        
+        // Если элемент не полностью видим, прокручиваем к нему
+        if (!isInViewport) {
+            // Используем плавную прокрутку
+            element.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+                inline: 'center'
+            });
+            
+            // На всякий случай возвращаем промис для ожидания окончания прокрутки
+            return new Promise(resolve => setTimeout(resolve, 500));
+        }
+    } catch (error) {
+        console.error('Ошибка при прокрутке к элементу:', error);
     }
+    
+    return Promise.resolve();
 }
 
-// Обновление UI обучения (при изменении размера окна и т.д.)
+// Обновление UI обучения (при изменении размера окна, прокрутке и т.д.)
 function updateTutorialUI() {
+    if (!tutorialState.isActive) return;
+    
     const step = tutorialSteps[tutorialState.currentStep];
+    if (!step) return;
     
     // Получаем целевые элементы
     let targetElements = [];
@@ -649,14 +817,14 @@ function updateTutorialUI() {
     
     if (targetElements.length === 0) return;
     
-    // Прокручиваем к первому элементу
-    scrollToElement(targetElements[0]);
+    // Берем первый элемент для позиционирования
+    const primaryElement = targetElements[0];
     
-    // Обновляем подсветку
+    // Обновляем подсветку без прокрутки
     if (targetElements.length === 1) {
-        highlightElement(targetElements[0], step);
+        updateHighlightElement(primaryElement, step);
     } else {
-        highlightMultipleElements(targetElements, step);
+        updateHighlightMultipleElements(targetElements, step);
     }
     
     // Обновляем позицию тултипа
@@ -666,8 +834,40 @@ function updateTutorialUI() {
                         ? step.mobilePosition 
                         : step.position;
                         
-        positionTooltip(tooltip, targetElements[0], position);
+        positionTooltip(tooltip, primaryElement, position);
     }
+}
+
+// Обновление выделения элемента без прокрутки
+function updateHighlightElement(element, step) {
+    const spotlight = document.querySelector('.tutorial-spotlight');
+    if (!spotlight || !element) return;
+    
+    const rect = element.getBoundingClientRect();
+    
+    // Добавляем немного отступа для лучшей видимости
+    const padding = 4;
+    
+    // Позиция и размеры подсветки
+    spotlight.style.top = `${rect.top - padding + window.scrollY}px`;
+    spotlight.style.left = `${rect.left - padding + window.scrollX}px`;
+    spotlight.style.width = `${rect.width + padding * 2}px`;
+    spotlight.style.height = `${rect.height + padding * 2}px`;
+}
+
+// Обновление выделения нескольких элементов без прокрутки
+function updateHighlightMultipleElements(elements, step) {
+    const spotlight = document.querySelector('.tutorial-spotlight');
+    if (!spotlight || elements.length === 0) return;
+    
+    const firstRect = elements[0].getBoundingClientRect();
+    
+    const padding = 4;
+    
+    spotlight.style.top = `${firstRect.top - padding + window.scrollY}px`;
+    spotlight.style.left = `${firstRect.left - padding + window.scrollX}px`;
+    spotlight.style.width = `${firstRect.width + padding * 2}px`;
+    spotlight.style.height = `${firstRect.height + padding * 2}px`;
 }
 
 // Ожидание появления элемента
@@ -699,20 +899,32 @@ function waitForElement(selector) {
 
 // Функция завершения обучения
 function completeTutorial() {
-    // Удаление UI обучения
-    removeTutorialUI();
+    // Добавляем класс для плавного исчезновения
+    const overlay = document.querySelector('.tutorial-overlay');
+    const spotlight = document.querySelector('.tutorial-spotlight');
+    const tooltip = document.querySelector('.tutorial-tooltip');
     
-    // Обновление состояния
-    tutorialState.isActive = false;
-    tutorialState.completedTutorial = true;
+    if (overlay) overlay.classList.add('tutorial-ending');
+    if (spotlight) spotlight.classList.add('tutorial-ending');
+    if (tooltip) tooltip.classList.add('tutorial-ending');
     
-    // Сохранение прогресса
-    if (tutorialState.userId) {
-        saveTutorialProgress();
-    }
-    
-    // Показ уведомления
-    showNotification('Обучение завершено! Теперь вы готовы использовать CEX-CEX Scan.', 'success');
+    // Даем анимации завершиться перед удалением
+    setTimeout(() => {
+        // Удаление UI обучения
+        removeTutorialUI();
+        
+        // Обновление состояния
+        tutorialState.isActive = false;
+        tutorialState.completedTutorial = true;
+        
+        // Сохранение прогресса
+        if (tutorialState.userId) {
+            saveTutorialProgress();
+        }
+        
+        // Показ уведомления
+        showNotification('Обучение завершено! Теперь вы готовы использовать CEX-CEX Scan.', 'success');
+    }, 300);
 }
 
 // Сохранение прогресса обучения
@@ -734,6 +946,8 @@ async function saveTutorialProgress() {
 
 // Подсветка элемента
 function highlightElement(element, step) {
+    if (!element) return;
+    
     const spotlight = document.querySelector('.tutorial-spotlight');
     if (!spotlight) return;
     
@@ -742,9 +956,9 @@ function highlightElement(element, step) {
     // Добавляем немного отступа для лучшей видимости
     const padding = 4;
     
-    // Позиция и размеры подсветки
-    spotlight.style.top = `${rect.top - padding}px`;
-    spotlight.style.left = `${rect.left - padding}px`;
+    // Позиция и размеры подсветки с учетом прокрутки
+    spotlight.style.top = `${rect.top - padding + window.scrollY}px`;
+    spotlight.style.left = `${rect.left - padding + window.scrollX}px`;
     spotlight.style.width = `${rect.width + padding * 2}px`;
     spotlight.style.height = `${rect.height + padding * 2}px`;
     
@@ -763,7 +977,7 @@ function highlightElement(element, step) {
 // Подсветка нескольких элементов
 function highlightMultipleElements(elements, step) {
     const spotlight = document.querySelector('.tutorial-spotlight');
-    if (!spotlight) return;
+    if (!spotlight || elements.length === 0) return;
     
     // Если элементов нет, скрываем подсветку
     if (elements.length === 0) {
@@ -786,8 +1000,8 @@ function highlightMultipleElements(elements, step) {
     // Устанавливаем подсветку на первый элемент
     const padding = 4;
     
-    spotlight.style.top = `${firstRect.top - padding}px`;
-    spotlight.style.left = `${firstRect.left - padding}px`;
+    spotlight.style.top = `${firstRect.top - padding + window.scrollY}px`;
+    spotlight.style.left = `${firstRect.left - padding + window.scrollX}px`;
     spotlight.style.width = `${firstRect.width + padding * 2}px`;
     spotlight.style.height = `${firstRect.height + padding * 2}px`;
     
@@ -797,10 +1011,10 @@ function highlightMultipleElements(elements, step) {
     spotlight.style.display = 'block';
 }
 
-// Показ тултипа
+// Показ тултипа с проверкой перекрытия
 function showTooltip(targetElement, step) {
     const tooltip = document.querySelector('.tutorial-tooltip');
-    if (!tooltip) return;
+    if (!tooltip || !targetElement) return;
     
     // Наполняем контентом
     tooltip.innerHTML = `
@@ -812,12 +1026,46 @@ function showTooltip(targetElement, step) {
         </div>
     `;
     
-    // Позиционирование тултипа
-    const position = tutorialState.isMobile && step.mobileAdjust && step.mobilePosition 
-                    ? step.mobilePosition 
-                    : step.position;
-                    
-    positionTooltip(tooltip, targetElement, position);
+    // Определяем, какую позицию использовать для тултипа
+    let position = step.position;
+    
+    // Для мобильных устройств может быть своя позиция
+    if (tutorialState.isMobile && step.mobileAdjust && step.mobilePosition) {
+        position = step.mobilePosition;
+    }
+    
+    // Список возможных позиций в порядке приоритета
+    const positions = ['top', 'bottom', 'left', 'right'];
+    
+    // Убеждаемся, что текущая позиция в начале списка
+    positions.splice(positions.indexOf(position), 1);
+    positions.unshift(position);
+    
+    // Проверяем каждую позицию, начиная с предпочтительной
+    let bestPosition = position;
+    let bestOverlap = Infinity;
+    
+    for (const pos of positions) {
+        // Предварительно позиционируем тултип
+        tooltip.style.visibility = 'hidden';
+        positionTooltipAt(tooltip, targetElement, pos);
+        
+        // Проверяем перекрытие с целевым элементом
+        const overlap = getOverlap(tooltip, targetElement);
+        
+        // Выбираем позицию с наименьшим перекрытием
+        if (overlap < bestOverlap) {
+            bestOverlap = overlap;
+            bestPosition = pos;
+            
+            // Если перекрытия нет вообще, сразу используем эту позицию
+            if (overlap === 0) break;
+        }
+    }
+    
+    // Устанавливаем тултип в лучшую позицию
+    tooltip.style.visibility = 'visible';
+    positionTooltipAt(tooltip, targetElement, bestPosition);
     
     // Обработчики кнопок
     const skipBtn = tooltip.querySelector('.tutorial-skip-btn');
@@ -837,13 +1085,34 @@ function showTooltip(targetElement, step) {
     }
 }
 
+// Определение площади перекрытия двух элементов
+function getOverlap(elem1, elem2) {
+    const rect1 = elem1.getBoundingClientRect();
+    const rect2 = elem2.getBoundingClientRect();
+    
+    const xOverlap = Math.max(0, Math.min(rect1.right, rect2.right) - Math.max(rect1.left, rect2.left));
+    const yOverlap = Math.max(0, Math.min(rect1.bottom, rect2.bottom) - Math.max(rect1.top, rect2.top));
+    
+    return xOverlap * yOverlap;
+}
+
 // Позиционирование тултипа
 function positionTooltip(tooltip, targetElement, position) {
+    if (!tooltip || !targetElement) return;
+    positionTooltipAt(tooltip, targetElement, position);
+}
+
+// Позиционирование тултипа в определенной позиции
+function positionTooltipAt(tooltip, targetElement, position) {
     const rect = targetElement.getBoundingClientRect();
     
-    // Сначала установим минимальную ширину, чтобы корректно рассчитать размеры
+    // Сначала устанавливаем минимальную ширину, чтобы корректно рассчитать размеры
     tooltip.style.visibility = 'hidden';
-    document.body.appendChild(tooltip);
+    
+    // Убедимся, что тултип добавлен в DOM
+    if (!tooltip.parentNode || tooltip.parentNode !== document.body) {
+        document.body.appendChild(tooltip);
+    }
     
     const tooltipRect = tooltip.getBoundingClientRect();
     
@@ -851,33 +1120,38 @@ function positionTooltip(tooltip, targetElement, position) {
     
     switch (position) {
         case 'top':
-            top = rect.top - tooltipRect.height - 10;
-            left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+            top = rect.top - tooltipRect.height - 10 + window.scrollY;
+            left = rect.left + (rect.width / 2) - (tooltipRect.width / 2) + window.scrollX;
             break;
         case 'bottom':
-            top = rect.bottom + 10;
-            left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+            top = rect.bottom + 10 + window.scrollY;
+            left = rect.left + (rect.width / 2) - (tooltipRect.width / 2) + window.scrollX;
             break;
         case 'left':
-            top = rect.top + (rect.height / 2) - (tooltipRect.height / 2);
-            left = rect.left - tooltipRect.width - 10;
+            top = rect.top + (rect.height / 2) - (tooltipRect.height / 2) + window.scrollY;
+            left = rect.left - tooltipRect.width - 10 + window.scrollX;
             break;
         case 'right':
-            top = rect.top + (rect.height / 2) - (tooltipRect.height / 2);
-            left = rect.right + 10;
+            top = rect.top + (rect.height / 2) - (tooltipRect.height / 2) + window.scrollY;
+            left = rect.right + 10 + window.scrollX;
             break;
         default:
-            top = rect.bottom + 10;
-            left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+            top = rect.bottom + 10 + window.scrollY;
+            left = rect.left + (rect.width / 2) - (tooltipRect.width / 2) + window.scrollX;
     }
     
     // Проверка, чтобы тултип не выходил за границы экрана
-    if (left < 10) left = 10;
-    if (left + tooltipRect.width > window.innerWidth - 10) 
-        left = window.innerWidth - tooltipRect.width - 10;
-    if (top < 10) top = 10;
-    if (top + tooltipRect.height > window.innerHeight - 10)
-        top = window.innerHeight - tooltipRect.height - 10;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    
+    if (left < scrollX + 10) left = scrollX + 10;
+    if (left + tooltipRect.width > scrollX + windowWidth - 10) 
+        left = scrollX + windowWidth - tooltipRect.width - 10;
+    if (top < scrollY + 10) top = scrollY + 10;
+    if (top + tooltipRect.height > scrollY + windowHeight - 10)
+        top = scrollY + windowHeight - tooltipRect.height - 10;
     
     tooltip.style.top = `${top}px`;
     tooltip.style.left = `${left}px`;
@@ -947,20 +1221,7 @@ function checkStepCompletion() {
     }
 }
 
-// Экспорт дополнительных функций для взаимодействия с другими модулями
-export function isTutorialActive() {
-    return tutorialState.isActive;
-}
-
-export function isTutorialCompleted() {
-    return tutorialState.completedTutorial;
-}
-
-export function getCurrentTutorialStep() {
-    return tutorialState.currentStep;
-}
-
-// Функция для возможности внешнего вызова перезапуска туториала
+// Функция для возможности внешнего сброса прогресса обучения
 export function resetTutorialProgress() {
     tutorialState.completedTutorial = false;
     
@@ -978,4 +1239,17 @@ export function resetTutorialProgress() {
     }
     
     showNotification('Прогресс обучения сброшен. Вы можете пройти обучение снова.', 'info');
+}
+
+// Экспорт дополнительных функций для взаимодействия с другими модулями
+export function isTutorialActive() {
+    return tutorialState.isActive;
+}
+
+export function isTutorialCompleted() {
+    return tutorialState.completedTutorial;
+}
+
+export function getCurrentTutorialStep() {
+    return tutorialState.currentStep;
 }
