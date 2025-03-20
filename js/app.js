@@ -6,7 +6,6 @@
 import { api } from './api.js';
 import { dataService } from './data-service.js';
 import { initializeUser, getCurrentUser, hasAccessToTradingPairs } from './auth.js';
-import { initializeTutorial } from './tutorial.js';
 import { 
     setupDOMElements, 
     setupEventListeners, 
@@ -17,7 +16,8 @@ import {
     setupMobileFilterToggle, 
     enhanceListView, 
     checkListViewAvailability, 
-    fixVolumeSlider
+    fixVolumeSlider,
+    showNotification
 } from './ui.js';
 import { 
     loadExchangesAndCoins, 
@@ -26,6 +26,7 @@ import {
     startTimerUpdates, 
     setupSettingsSaveListeners
 } from './data-manager.js';
+import { initializeTutorial } from './tutorial.js';
 
 // Состояние приложения
 let appState = {
@@ -122,9 +123,7 @@ function setupNetworkMonitoring() {
     // Обработка потери/восстановления соединения
     window.addEventListener('online', () => {
         console.log('🌐 Network connection restored');
-        import('./ui.js').then(UI => {
-            UI.showNotification('Соединение восстановлено', 'success');
-        });
+        showNotification('Соединение восстановлено', 'success');
         
         // Сбросить счетчики ошибок API и обновить данные
         api.resetAllErrorStatus?.();
@@ -133,94 +132,12 @@ function setupNetworkMonitoring() {
     
     window.addEventListener('offline', () => {
         console.log('❌ Network connection lost');
-        import('./ui.js').then(UI => {
-            UI.showNotification('Соединение потеряно', 'error');
-        });
+        showNotification('Соединение потеряно', 'error');
     });
 }
 
 /**
- * Главная функция инициализации приложения
- */
-async function initializeApp() {
-    try {
-        logAppInfo();
-        
-        // Базовая настройка UI и обработчиков
-        setupDOMElements();
-        const isAuthenticated = await initializeUser();
-        if (!isAuthenticated) return;
-        
-        // Настройка UI элементов
-        setupRangeSliders();
-        replaceSortingControls();
-        ensureRefreshButtonStyle();
-        setupCollapsibleFilterGroups();
-        setupEventListeners();
-        
-        // Загрузка базовых данных и настройка фильтров
-        await loadExchangesAndCoins();
-        
-        // Загрузка данных о торговых парах
-        await fetchData();
-        
-        // Запуск таймеров и обновлений
-        startTimerUpdates();
-        startAutoUpdate(10); 
-        
-        // Настройка адаптивности и отзывчивости интерфейса
-        window.addEventListener('resize', handleWindowResize);
-        setupMobileFilterToggle();
-        enhanceListView();
-        checkListViewAvailability();
-        fixVolumeSlider();
-        
-        // Настройка сохранения настроек
-        setupSettingsSaveListeners();
-        
-        // Настройка мониторинга сети
-        setupNetworkMonitoring();
-        
-        // Настройка обработки ошибок
-        setupErrorHandling();
-        
-        // Дополнительные настройки при необходимости
-        setupServiceWorker();
-        
-        // Инициализация завершена
-        appState.initialized = true;
-        console.log('✅ Application initialized successfully');
-        
-        // Анализ URL параметров (если нужно)
-        handleUrlParameters();
-         // Инициализация модуля обучения (после всех остальных модулей)
-        initializeTutorial();
-        
-    } catch (error) {
-        console.error('❌ Error initializing application:', error);
-        
-        // Показываем сообщение об ошибке пользователю
-        const errorContainer = document.createElement('div');
-        errorContainer.style.position = 'fixed';
-        errorContainer.style.top = '50%';
-        errorContainer.style.left = '50%';
-        errorContainer.style.transform = 'translate(-50%, -50%)';
-        errorContainer.style.backgroundColor = 'rgba(244, 67, 54, 0.9)';
-        errorContainer.style.color = 'white';
-        errorContainer.style.padding = '20px';
-        errorContainer.style.borderRadius = '8px';
-        errorContainer.style.zIndex = '9999';
-        errorContainer.innerHTML = `
-            <h3>Ошибка инициализации приложения</h3>
-            <p>${error.message || 'Неизвестная ошибка'}</p>
-            <button onclick="location.reload()">Перезагрузить</button>
-        `;
-        document.body.appendChild(errorContainer);
-    }
-}
-
-/**
- * Обработка параметров URL (для глубоких ссылок)
+ * Анализ URL параметров (для глубоких ссылок)
  */
 function handleUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -288,6 +205,120 @@ function setupLoadingAnimations() {
     document.querySelector('.app-container').classList.add('fade-in');
 }
 
+/**
+ * Главная функция инициализации приложения
+ */
+async function initializeApp() {
+    try {
+        logAppInfo();
+        
+        // Базовая настройка UI и обработчиков
+        setupDOMElements();
+        const isAuthenticated = await initializeUser();
+        if (!isAuthenticated) return;
+        
+        // Настройка UI элементов
+        setupRangeSliders();
+        replaceSortingControls();
+        ensureRefreshButtonStyle();
+        setupCollapsibleFilterGroups();
+        setupEventListeners();
+        
+        // Загрузка базовых данных и настройка фильтров
+        await loadExchangesAndCoins();
+        
+        // Загрузка данных о торговых парах
+        await fetchData();
+        
+        // Запуск таймеров и обновлений
+        startTimerUpdates();
+        startAutoUpdate(10); 
+        
+        // Настройка адаптивности и отзывчивости интерфейса
+        window.addEventListener('resize', handleWindowResize);
+        setupMobileFilterToggle();
+        enhanceListView();
+        checkListViewAvailability();
+        fixVolumeSlider();
+        
+        // Настройка сохранения настроек
+        setupSettingsSaveListeners();
+        
+        // Настройка мониторинга сети
+        setupNetworkMonitoring();
+        
+        // Настройка обработки ошибок
+        setupErrorHandling();
+        
+        // Инициализация модуля интерактивного обучения
+        initializeTutorial();
+        
+        // Явно устанавливаем начальный вид (убедитесь, что treemap выбран как начальный)
+        const initialView = 'treemap';
+        const initialViewBtn = document.querySelector(`.view-btn[data-view="${initialView}"]`);
+        if (initialViewBtn) {
+            // Переключаем на вид вручную, чтобы гарантировать, что он отобразится
+            import('./ui.js').then(UI => {
+                // Установка активного класса
+                document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
+                initialViewBtn.classList.add('active');
+                
+                // Установка текущего вида
+                import('./data-manager.js').then(DataManager => {
+                    DataManager.setCurrentView(initialView);
+                });
+                
+                // Скрытие всех видов кроме начального
+                document.querySelectorAll('.heatmap-view').forEach(view => {
+                    view.classList.remove('active');
+                    view.style.display = 'none';
+                });
+                
+                // Активация начального вида
+                const viewElement = document.getElementById(`${initialView}View`);
+                if (viewElement) {
+                    viewElement.classList.add('active');
+                    viewElement.style.display = 'block';
+                    
+                    // Рендеринг начального вида
+                    UI.renderTreemap();
+                }
+            });
+        }
+        
+        // Дополнительные настройки при необходимости
+        setupServiceWorker();
+        
+        // Инициализация завершена
+        appState.initialized = true;
+        console.log('✅ Application initialized successfully');
+        
+        // Анализ URL параметров (если нужно)
+        handleUrlParameters();
+        
+    } catch (error) {
+        console.error('❌ Error initializing application:', error);
+        
+        // Показываем сообщение об ошибке пользователю
+        const errorContainer = document.createElement('div');
+        errorContainer.style.position = 'fixed';
+        errorContainer.style.top = '50%';
+        errorContainer.style.left = '50%';
+        errorContainer.style.transform = 'translate(-50%, -50%)';
+        errorContainer.style.backgroundColor = 'rgba(244, 67, 54, 0.9)';
+        errorContainer.style.color = 'white';
+        errorContainer.style.padding = '20px';
+        errorContainer.style.borderRadius = '8px';
+        errorContainer.style.zIndex = '9999';
+        errorContainer.innerHTML = `
+            <h3>Ошибка инициализации приложения</h3>
+            <p>${error.message || 'Неизвестная ошибка'}</p>
+            <button onclick="location.reload()">Перезагрузить</button>
+        `;
+        document.body.appendChild(errorContainer);
+    }
+}
+
 // Запуск приложения при загрузке DOM
 document.addEventListener('DOMContentLoaded', async function() {
     setupLoadingAnimations();
@@ -300,5 +331,10 @@ window.app = {
     getAppState: () => ({...appState}),
     getUserInfo: getCurrentUser,
     hasAccess: hasAccessToTradingPairs,
-    version: appState.version
+    version: appState.version,
+    restartTutorial: () => {
+        import('./tutorial.js').then(Tutorial => {
+            Tutorial.startTutorial();
+        });
+    }
 };
