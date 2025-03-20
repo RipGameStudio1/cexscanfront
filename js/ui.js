@@ -1,5 +1,5 @@
 import { getHeatClass, formatPercent, formatPrice, formatNumber, formatCurrency, updateElementTimer } from './utils.js';
-import { getCurrentView, getFilteredPairsData, getPairsData, filterAndRenderData, saveUserFilters } from './data-manager.js';
+import { getCurrentView, getFilteredPairsData, getPairsData, filterAndRenderData, saveUserFilters, setUIHandlers } from './data-manager.js';
 import { hasAccessToTradingPairs, getCurrentUser } from './auth.js';
 import { dataService } from './data-service.js';
 
@@ -7,6 +7,21 @@ import { dataService } from './data-service.js';
 export let isDetailsPanelOpen = false;
 export let currentDetailsPairId = null;
 let detailsPanelTimerId = null;
+
+// Делаем доступными через window для доступа из других модулей без циклических зависимостей
+window.isDetailsPanelOpen = isDetailsPanelOpen;
+window.currentDetailsPairId = currentDetailsPairId;
+window.showPairDetails = showPairDetails;
+
+// Регистрация UI-обработчиков для data-manager.js
+setUIHandlers({
+    renderHeatmap,
+    updateStatistics,
+    showNotification,
+    animateRefreshButton,
+    renderPurchaseLicenseMessage,
+    updateDetailsPanelTimer
+});
 
 // Настройка DOM-элементов
 export function setupDOMElements() {
@@ -56,6 +71,7 @@ export function setupEventListeners() {
             
             import('./data-manager.js').then(module => {
                 module.setCurrentView(this.dataset.view);
+                module.saveViewMode(this.dataset.view);
             });
             
             document.querySelectorAll('.heatmap-view').forEach(view => {
@@ -108,7 +124,9 @@ export function setupEventListeners() {
     window.DOM.closeDetailsBtn.addEventListener('click', function() {
         window.DOM.detailsPanel.classList.remove('active');
         isDetailsPanelOpen = false;
+        window.isDetailsPanelOpen = false;
         currentDetailsPairId = null;
+        window.currentDetailsPairId = null;
         window.DOM.mainContent.classList.remove('details-open');
         
         if (detailsPanelTimerId) {
@@ -132,6 +150,7 @@ export function setupSortButtons() {
             import('./data-manager.js').then(module => {
                 module.setCurrentSortField(this.dataset.sort);
                 module.setCurrentSortOrder(this.dataset.order);
+                module.saveSortSettings(this.dataset.sort, this.dataset.order);
                 module.filterAndRenderData();
             });
         });
@@ -157,6 +176,7 @@ export function checkListViewAvailability() {
                     gridViewBtn.classList.add('active');
                     
                     module.setCurrentView('grid');
+                    module.saveViewMode('grid');
                     
                     document.querySelectorAll('.heatmap-view').forEach(view => {
                         view.classList.remove('active');
@@ -907,6 +927,7 @@ export function showPairDetails(pair) {
     }
     
     currentDetailsPairId = pair._id.$oid || pair._id;
+    window.currentDetailsPairId = currentDetailsPairId;
     
     document.getElementById('detailsPairName').textContent = pair.coin_pair;
     document.getElementById('detailsNetwork').textContent = pair.network;
@@ -993,6 +1014,7 @@ export function showPairDetails(pair) {
     window.DOM.mainContent.classList.add('details-open');
     window.DOM.detailsPanel.classList.add('active');
     isDetailsPanelOpen = true;
+    window.isDetailsPanelOpen = true;
 }
 
 // Обновление таймера на панели деталей
