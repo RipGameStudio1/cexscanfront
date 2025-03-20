@@ -1,7 +1,6 @@
 import { dataService } from './data-service.js';
 import { getCurrentUser, hasAccessToTradingPairs } from './auth.js';
 import { formatCurrency, formatPercent, formatNumber, debounce, updateElementTimer } from './utils.js';
-import { showNotification, renderHeatmap, renderTreemap, renderGrid, renderList, updateStatistics, animateRefreshButton } from './ui.js';
 
 // Глобальные переменные для данных и состояния
 let currentView = 'treemap'; 
@@ -13,6 +12,21 @@ let filteredPairsData = [];
 let timerUpdatesInterval = null; 
 let buyExchanges = []; 
 let sellExchanges = []; 
+
+// UI-обработчики - механизм для устранения циклических зависимостей
+let uiHandlers = {
+    renderHeatmap: () => console.warn('renderHeatmap not initialized'),
+    updateStatistics: () => console.warn('updateStatistics not initialized'),
+    showNotification: (message, type) => console.warn('showNotification not initialized: ', message, type),
+    animateRefreshButton: (duration) => console.warn('animateRefreshButton not initialized'),
+    renderPurchaseLicenseMessage: (container) => console.warn('renderPurchaseLicenseMessage not initialized'),
+    updateDetailsPanelTimer: (pair) => {}
+};
+
+// Регистрация UI-обработчиков
+export function setUIHandlers(handlers) {
+    uiHandlers = { ...uiHandlers, ...handlers };
+}
 
 // Геттеры и сеттеры для данных
 export function getPairsData() {
@@ -92,7 +106,7 @@ export async function loadExchangesAndCoins() {
         return { exchanges, coins };
     } catch (error) {
         console.error('Error loading exchanges and coins:', error);
-        showNotification('Ошибка загрузки данных бирж и монет', 'error');
+        uiHandlers.showNotification('Ошибка загрузки данных бирж и монет', 'error');
         return { exchanges: [], coins: [] };
     }
 }
@@ -100,14 +114,14 @@ export async function loadExchangesAndCoins() {
 // Загрузка данных о торговых парах
 export async function fetchData() {
     try {
-        animateRefreshButton(2000);
+        uiHandlers.animateRefreshButton(2000);
         
         if (!hasAccessToTradingPairs()) {
             console.log("No access to trading pairs due to license restrictions");
             pairsData = [];
             filteredPairsData = [];
-            updateStatistics();
-            renderHeatmap(); 
+            uiHandlers.updateStatistics();
+            uiHandlers.renderHeatmap(); 
             return;
         }
         
@@ -133,21 +147,23 @@ export async function fetchData() {
             
             filterAndRenderData();
             
-            const { isDetailsPanelOpen, currentDetailsPairId, showPairDetails } = await import('./ui.js');
+            // Получаем информацию о панели деталей из глобального состояния
+            const isDetailsPanelOpen = window.isDetailsPanelOpen || false;
+            const currentDetailsPairId = window.currentDetailsPairId;
             
             if (isDetailsPanelOpen && currentDetailsPairId) {
                 const pair = pairsData.find(p => 
                     (p._id.$oid || p._id) === currentDetailsPairId);
                 if (pair) {
-                    showPairDetails(pair);
+                    window.showPairDetails?.(pair);
                 }
             }
         } else {
-            showNotification('Нет активных пар', 'warning');
+            uiHandlers.showNotification('Нет активных пар', 'warning');
         }
     } catch (error) {
         console.error('Error fetching data:', error);
-        showNotification('Ошибка загрузки данных', 'error');
+        uiHandlers.showNotification('Ошибка загрузки данных', 'error');
         
         if (error.message === 'User not authenticated') {
             const { redirectToLogin } = await import('./auth.js');
@@ -207,8 +223,8 @@ export function filterAndRenderData() {
     
     filteredPairsData = sortData(filteredPairsData, currentSortField, currentSortOrder);
     
-    updateStatistics();
-    renderHeatmap();
+    uiHandlers.updateStatistics();
+    uiHandlers.renderHeatmap();
 }
 
 // Сортировка данных
@@ -572,7 +588,7 @@ export function startAutoUpdate(seconds) {
     
     if (seconds > 0) {
         updateInterval = setInterval(() => {
-            animateRefreshButton(1000);
+            uiHandlers.animateRefreshButton(1000);
             fetchData();
         }, seconds * 1000);
         
@@ -617,26 +633,16 @@ export function updateAllTimers() {
         }
     });
     
-    const { isDetailsPanelOpen, currentDetailsPairId, updateDetailsPanelTimer } = importSync('./ui.js');
+    const isDetailsPanelOpen = window.isDetailsPanelOpen || false;
+    const currentDetailsPairId = window.currentDetailsPairId;
     
     if (isDetailsPanelOpen) {
         const timerElement = document.getElementById('detailsUpdated');
         const pairData = filteredPairsData.find(p => (p._id.$oid || p._id) === currentDetailsPairId);
         if (timerElement && pairData && pairData.alive_time) {
-            updateDetailsPanelTimer(pairData);
+            uiHandlers.updateDetailsPanelTimer(pairData);
         }
     }
-}
-
-// Синхронный импорт (заглушка, будет заменена на реальный механизм)
-function importSync(path) {
-    // В реальном приложении здесь был бы механизм синхронного импорта
-    // Или лучше переделать на полностью асинхронный код
-    return { 
-        isDetailsPanelOpen: window.isDetailsPanelOpen || false,
-        currentDetailsPairId: window.currentDetailsPairId || null,
-        updateDetailsPanelTimer: function() {}
-    };
 }
 
 // Рендеринг тегов монет
