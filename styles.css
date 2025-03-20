@@ -1388,3 +1388,8 @@ tr.pinned td:first-child {
 .all-exchanges-btn.active {
     background-color: rgba(41, 98, 255, 0.3);
 }
+.highlight-tutorial {
+    position: relative;
+    z-index: 10000;
+    animation: pulse-border 1.5s infinite;
+}
