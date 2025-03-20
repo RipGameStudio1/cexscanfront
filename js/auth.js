@@ -1,7 +1,7 @@
 import { dataService } from './data-service.js';
-import { showNotification } from './ui.js';
+import { showNotification, renderHeatmap, updateStatistics } from './ui.js';
 import { formatTimeRemaining } from './utils.js';
-import { loadUserSettings, updateStatistics, renderHeatmap, setPairsData, setFilteredPairsData, setupSettingsSaveListeners } from './data-manager.js';
+import { loadUserSettings, setPairsData, setFilteredPairsData, setupSettingsSaveListeners } from './data-manager.js';
 
 // Глобальная переменная для текущего пользователя
 let currentUser = null;
