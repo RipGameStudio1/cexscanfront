@@ -66,22 +66,49 @@ export function setupEventListeners() {
         button.addEventListener('click', function() {
             if (this.classList.contains('disabled')) return;
             
+            // Переключаем активную кнопку
             window.DOM.viewButtons.forEach(btn => btn.classList.remove('active'));
             this.classList.add('active');
             
-            import('./data-manager.js').then(module => {
-                module.setCurrentView(this.dataset.view);
-                module.saveViewMode(this.dataset.view);
-            });
+            const selectedView = this.dataset.view;
             
+            // Форсируем немедленное переключение без анимации
             document.querySelectorAll('.heatmap-view').forEach(view => {
+                // Сначала убираем все переходы и анимации
+                view.style.transition = 'none';
                 view.classList.remove('active');
-                view.innerHTML = '';
-                view.removeAttribute('style');
+                view.style.display = 'none';
             });
             
-            document.getElementById(this.dataset.view + 'View').classList.add('active');
-            renderHeatmap();
+            // Вызываем reflow для применения изменений
+            document.body.offsetHeight;
+            
+            // Активируем выбранный вид
+            const targetView = document.getElementById(`${selectedView}View`);
+            if (targetView) {
+                // Сразу устанавливаем display: block перед добавлением класса active
+                targetView.style.display = 'block';
+                
+                // Еще один reflow
+                document.body.offsetHeight;
+                
+                // Добавляем класс active
+                targetView.classList.add('active');
+            }
+            
+            // Обновляем состояние в data-manager
+            import('./data-manager.js').then(module => {
+                module.setCurrentView(selectedView);
+                
+                // Принудительно перерисовываем нужный вид
+                if (selectedView === 'treemap') {
+                    renderTreemap();
+                } else if (selectedView === 'grid') {
+                    renderGrid();
+                } else if (selectedView === 'list') {
+                    renderList();
+                }
+            });
         });
     });
     
@@ -726,6 +753,7 @@ export function renderTreemap() {
 
 // Рендеринг сетки
 export function renderGrid() {
+    console.time('gridRender'); // замер производительности
     const container = window.DOM.gridView;
     container.innerHTML = '';
     
@@ -813,10 +841,12 @@ export function renderGrid() {
     });
     
     container.appendChild(cardsContainer);
+console.timeEnd('gridRender'); // окончание замера
 }
 
 // Рендеринг списка
 export function renderList() {
+    console.time('listRender'); // замер производительности
     const container = window.DOM.listView;
     container.innerHTML = '';
     
@@ -917,6 +947,7 @@ export function renderList() {
     table.appendChild(tbody);
     scrollContainer.appendChild(table);
     container.appendChild(scrollContainer);
+    console.timeEnd('listRender'); // окончание замера
 }
 
 // Отображение деталей пары
