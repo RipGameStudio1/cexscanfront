@@ -672,4 +672,404 @@ export function renderTreemap() {
                     </div>
                 </div>
                 <div class="tile-footer">
-                    <div class="tile-volume">$${formatNumber(pair.available_volume_usd)}
+                    <div class="tile-volume">$${formatNumber(pair.available_volume_usd)}</div>
+                    <div class="tile-updated"></div>
+                </div>
+            </div>
+        `;
+        
+        const timeElement = tile.querySelector('.tile-updated');
+        if (timeElement && pair.alive_time) {
+            updateElementTimer(timeElement, pair.alive_time.$date || pair.alive_time);
+        }
+        
+        tile.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('exchange-link')) {
+                showPairDetails(pair);
+            }
+        });
+        
+        const exchangeLinks = tile.querySelectorAll('.exchange-link');
+        exchangeLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.stopPropagation(); 
+                const url = link.dataset.url;
+                if (url && url !== '#') {
+                    window.open(url, '_blank');
+                }
+            });
+        });
+        
+        container.appendChild(tile);
+    });
+}
+
+// Рендеринг сетки
+export function renderGrid() {
+    const container = window.DOM.gridView;
+    container.innerHTML = '';
+    
+    if (!hasAccessToTradingPairs()) {
+        renderPurchaseLicenseMessage(container);
+        return;
+    }
+    
+    const filteredPairsData = getFilteredPairsData();
+    
+    if (filteredPairsData.length === 0) {
+        container.innerHTML = '<div class="no-data">Нет данных, соответствующих фильтрам</div>';
+        return;
+    }
+    
+    const cardsContainer = document.createElement('div');
+    cardsContainer.className = 'grid-cards';
+    
+    filteredPairsData.forEach(pair => {
+        const heatClass = getHeatClass(pair.spread);
+        
+        const card = document.createElement('div');
+        card.className = `grid-card ${heatClass}`;
+        
+        if (pair.alive_time) {
+            card.dataset.aliveTime = pair.alive_time.$date || pair.alive_time;
+        }
+        
+        if (pair.is_pinned) {
+            card.classList.add('pinned');
+        }
+        
+        card.innerHTML = `
+            <div class="card-content">
+                <div class="card-header">
+                    <div>
+                        <div class="card-pair">${pair.coin_pair}</div>
+                        <div class="card-network">${pair.network}</div>
+                    </div>
+                    <div class="card-spread">+${formatPercent(pair.spread)}</div>
+                </div>
+                <div class="card-exchanges">
+                    <div class="card-buy">
+                        <div class="exchange-label">Покупка</div>
+                        <div class="exchange-name exchange-link" data-url="${pair.buy_url || '#'}">${pair.buy_exchange}</div>
+                        <div class="exchange-price">$${formatPrice(pair.buy_price)}</div>
+                    </div>
+                    <div class="card-sell">
+                        <div class="exchange-label">Продажа</div>
+                        <div class="exchange-name exchange-link" data-url="${pair.sell_url || '#'}">${pair.sell_exchange}</div>
+                        <div class="exchange-price">$${formatPrice(pair.sell_price)}</div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div>Объем: $${formatNumber(pair.available_volume_usd)}</div>
+                    <div>Прибыль: $${formatNumber(pair.available_volume_usd * pair.spread / 100)}</div>
+                    <div class="card-updated"></div>
+                </div>
+            </div>
+        `;
+        
+        const timeElement = card.querySelector('.card-updated');
+        if (timeElement && pair.alive_time) {
+            updateElementTimer(timeElement, pair.alive_time.$date || pair.alive_time);
+        }
+        
+        card.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('exchange-link')) {
+                showPairDetails(pair);
+            }
+        });
+        
+        const exchangeLinks = card.querySelectorAll('.exchange-link');
+        exchangeLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.stopPropagation(); 
+                const url = link.dataset.url;
+                if (url && url !== '#') {
+                    window.open(url, '_blank');
+                }
+            });
+        });
+        
+        cardsContainer.appendChild(card);
+    });
+    
+    container.appendChild(cardsContainer);
+}
+
+// Рендеринг списка
+export function renderList() {
+    const container = window.DOM.listView;
+    container.innerHTML = '';
+    
+    if (!hasAccessToTradingPairs()) {
+        renderPurchaseLicenseMessage(container);
+        return;
+    }
+    
+    const filteredPairsData = getFilteredPairsData();
+    
+    if (filteredPairsData.length === 0) {
+        container.innerHTML = '<div class="no-data">Нет данных, соответствующих фильтрам</div>';
+        return;
+    }
+    
+    const scrollContainer = document.createElement('div');
+    scrollContainer.className = 'table-scroll-container';
+    
+    const table = document.createElement('table');
+    table.className = 'list-table';
+    
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    
+    const headers = ['Пара', 'Сеть', 'Спред', 'Покупка', 'Продажа', 'Объем', 'Прибыль', 'Обновлено'];
+    
+    headers.forEach(headerText => {
+        const th = document.createElement('th');
+        th.textContent = headerText;
+        headerRow.appendChild(th);
+    });
+    
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+    
+    const tbody = document.createElement('tbody');
+    
+    filteredPairsData.forEach(pair => {
+        const heatClass = getHeatClass(pair.spread);
+        
+        const row = document.createElement('tr');
+        
+        if (pair.is_pinned) {
+            row.classList.add('pinned');
+        }
+        
+        if (pair.alive_time) {
+            row.dataset.aliveTime = pair.alive_time.$date || pair.alive_time;
+        }
+        
+        const pairCell = document.createElement('td');
+        pairCell.textContent = pair.coin_pair;
+        row.appendChild(pairCell);
+        
+        const networkCell = document.createElement('td');
+        networkCell.className = 'list-network';
+        networkCell.textContent = pair.network;
+        row.appendChild(networkCell);
+        
+        const spreadCell = document.createElement('td');
+        spreadCell.className = `list-spread ${heatClass}`;
+        spreadCell.textContent = '+' + formatPercent(pair.spread);
+        row.appendChild(spreadCell);
+        
+        const buyCell = document.createElement('td');
+        buyCell.textContent = `${pair.buy_exchange} ($${formatPrice(pair.buy_price)})`;
+        row.appendChild(buyCell);
+        
+        const sellCell = document.createElement('td');
+        sellCell.textContent = `${pair.sell_exchange} ($${formatPrice(pair.sell_price)})`;
+        row.appendChild(sellCell);
+        
+        const volumeCell = document.createElement('td');
+        volumeCell.className = 'list-volume';
+        volumeCell.textContent = '$' + formatNumber(pair.available_volume_usd);
+        row.appendChild(volumeCell);
+        
+        const profitCell = document.createElement('td');
+        profitCell.className = 'list-profit';
+        profitCell.textContent = '$' + formatNumber(pair.available_volume_usd * pair.spread / 100);
+        row.appendChild(profitCell);
+        
+        const timeCell = document.createElement('td');
+        timeCell.className = 'list-updated';
+        row.appendChild(timeCell);
+        
+        if (pair.alive_time) {
+            updateElementTimer(timeCell, pair.alive_time.$date || pair.alive_time);
+        }
+        
+        row.addEventListener('click', () => {
+            showPairDetails(pair);
+        });
+        
+        tbody.appendChild(row);
+    });
+    
+    table.appendChild(tbody);
+    scrollContainer.appendChild(table);
+    container.appendChild(scrollContainer);
+}
+
+// Отображение деталей пары
+export function showPairDetails(pair) {
+    if (detailsPanelTimerId) {
+        clearInterval(detailsPanelTimerId);
+        detailsPanelTimerId = null;
+    }
+    
+    currentDetailsPairId = pair._id.$oid || pair._id;
+    
+    document.getElementById('detailsPairName').textContent = pair.coin_pair;
+    document.getElementById('detailsNetwork').textContent = pair.network;
+    
+    const spreadElement = document.getElementById('detailsSpread');
+    spreadElement.textContent = '+' + formatPercent(pair.spread);
+    spreadElement.className = 'spread-badge ' + getHeatClass(pair.spread);
+    
+    document.getElementById('detailsBuyExchange').textContent = pair.buy_exchange;
+    document.getElementById('detailsBuyPrice').textContent = '$' + formatPrice(pair.buy_price);
+    
+    document.getElementById('detailsSellExchange').textContent = pair.sell_exchange;
+    document.getElementById('detailsSellPrice').textContent = '$' + formatPrice(pair.sell_price);
+    
+    document.getElementById('detailsVolume').textContent = '$' + formatNumber(pair.available_volume_usd);
+    
+    const commissionText = pair.commission + ' ' + pair.coin_pair.split('/')[0];
+    document.getElementById('detailsCommission').textContent = commissionText;
+    
+    const profit = (pair.available_volume_usd * pair.spread / 100);
+    document.getElementById('detailsProfit').textContent = '$' + formatNumber(profit);
+    
+    const buyBtn = document.getElementById('detailsBuyBtn');
+    buyBtn.querySelector('span:last-child').textContent = 'Купить на ' + pair.buy_exchange;
+    buyBtn.onclick = function() {
+        if (pair.buy_url && pair.buy_url !== '#') {
+            window.open(pair.buy_url, '_blank');
+        } else {
+            showNotification('Ссылка для покупки недоступна', 'warning');
+        }
+    };
+    
+    const sellBtn = document.getElementById('detailsSellBtn');
+    sellBtn.querySelector('span:last-child').textContent = 'Продать на ' + pair.sell_exchange;
+    sellBtn.onclick = function() {
+        if (pair.sell_url && pair.sell_url !== '#') {
+            window.open(pair.sell_url, '_blank');
+        } else {
+            showNotification('Ссылка для продажи недоступна', 'warning');
+        }
+    };
+    
+    const pinBtn = document.getElementById('detailsPinBtn');
+    pinBtn.classList.toggle('active', pair.is_pinned);
+    pinBtn.querySelector('span:last-child').textContent = pair.is_pinned ? 'Открепить' : 'Закрепить';
+    
+    pinBtn.onclick = async function() {
+        const currentUser = getCurrentUser();
+        
+        if (!currentUser) {
+            showNotification('Необходима авторизация', 'warning');
+            return;
+        }
+        
+        try {
+            const pairId = pair._id.$oid || pair._id;
+            
+            if (pair.is_pinned) {
+                await dataService.unpinPair(pairId, currentUser.telegram_id);
+                pinBtn.classList.remove('active');
+                pinBtn.querySelector('span:last-child').textContent = 'Закрепить';
+            } else {
+                await dataService.pinPair(pairId, currentUser.telegram_id);
+                pinBtn.classList.add('active');
+                pinBtn.querySelector('span:last-child').textContent = 'Открепить';
+            }
+            
+            setTimeout(() => {
+                import('./data-manager.js').then(module => {
+                    module.fetchData();
+                });
+            }, 300);
+            
+            showNotification('Статус закрепления изменен', 'success');
+        } catch (error) {
+            console.error('Error toggling pin status:', error);
+            showNotification('Ошибка при изменении статуса закрепления', 'error');
+        }
+    };
+    
+    updateDetailsPanelTimer(pair);
+    startDetailsPanelTimer(pair);
+    
+    window.DOM.mainContent.classList.add('details-open');
+    window.DOM.detailsPanel.classList.add('active');
+    isDetailsPanelOpen = true;
+}
+
+// Обновление таймера на панели деталей
+export function updateDetailsPanelTimer(pair) {
+    if (!pair.alive_time) return;
+    
+    const timerElement = document.getElementById('detailsUpdated');
+    if (!timerElement) return;
+    
+    const now = new Date();
+    const aliveTime = new Date(pair.alive_time.$date || pair.alive_time);
+    const diffInSeconds = Math.floor((now - aliveTime) / 1000);
+    
+    const hours = Math.floor(diffInSeconds / 3600);
+    const minutes = Math.floor((diffInSeconds % 3600) / 60);
+    const seconds = diffInSeconds % 60;
+    
+    const timeStr = 
+        (hours > 0 ? hours + 'ч ' : '') + 
+        (minutes > 0 ? minutes + 'м ' : '') + 
+        seconds + 'с назад';
+    
+    timerElement.textContent = timeStr;
+}
+
+// Запуск таймера для панели деталей
+export function startDetailsPanelTimer(pair) {
+    if (!pair.alive_time) return;
+    
+    detailsPanelTimerId = setInterval(() => {
+        updateDetailsPanelTimer(pair);
+    }, 1000);
+    
+    return detailsPanelTimerId;
+}
+
+// Отображение уведомления
+export function showNotification(message, type = 'info') {
+    let notification = document.querySelector('.toast');
+    
+    if (!notification) {
+        notification = document.createElement('div');
+        notification.className = 'toast';
+        document.body.appendChild(notification);
+    }
+    
+    notification.className = 'toast';
+    
+    switch (type) {
+        case 'success':
+            notification.style.borderColor = 'var(--accent-green)';
+            notification.style.color = 'var(--accent-green)';
+            break;
+        case 'error':
+            notification.style.borderColor = 'var(--accent-red)';
+            notification.style.color = 'var(--accent-red)';
+            break;
+        case 'warning':
+            notification.style.borderColor = 'var(--heat-warm-2)';
+            notification.style.color = 'var(--heat-warm-2)';
+            break;
+        default:
+            notification.style.borderColor = 'var(--accent-blue)';
+            notification.style.color = 'var(--accent-blue)';
+    }
+    
+    notification.textContent = message;
+    
+    setTimeout(() => notification.classList.add('show'), 10);
+    
+    setTimeout(() => {
+        notification.classList.remove('show');
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 3000);
+}
