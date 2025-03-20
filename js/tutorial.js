@@ -17,7 +17,7 @@ let tutorialState = {
 const tutorialSteps = [
     // Шаг 1: Приветствие и знакомство с интерфейсом
     {
-        target: '.app-header',
+        target: '.logo',  // Уточненный селектор - теперь логотип вместо всего хедера
         title: 'Добро пожаловать в CEX-CEX Scan!',
         content: 'Это приложение поможет вам найти арбитражные возможности между криптовалютными биржами. Давайте познакомимся с интерфейсом!',
         position: 'bottom',
@@ -29,10 +29,11 @@ const tutorialSteps = [
     {
         target: '.view-controls',
         title: 'Режимы просмотра',
-        content: 'Попробуйте переключиться между режимами визуализации данных. Нажмите на любую другую кнопку вида.',
+        content: 'Попробуйте переключиться между режимами визуализации данных. Нажмите на кнопку "Grid" или "List".',
         position: 'bottom',
         action: 'click',
         actionTarget: '.view-btn:not(.active)',
+        highlightActionTargets: true,  // Подсвечиваем только цели действия
         mobileAdjust: true,
         mobilePosition: 'bottom'
     },
@@ -41,10 +42,11 @@ const tutorialSteps = [
     {
         target: '.coin-filters',
         title: 'Фильтр монет',
-        content: 'Выберите интересующие вас монеты, нажав на один из тегов.',
+        content: 'Выберите интересующие вас монеты, нажав на любую неактивную монету из списка.',
         position: 'right',
         action: 'click',
-        actionTarget: '.coin-tag:not(.active)',
+        actionTarget: '.coin-tag:not(.active):not(.all-coins-btn)',  // Уточненный селектор
+        highlightActionTargets: true,  // Подсвечиваем только цели действия
         mobileAdjust: true,
         mobileCallback: openMobileFilters
     },
@@ -53,7 +55,7 @@ const tutorialSteps = [
     {
         target: '.range-filter:first-child',
         title: 'Настройка спреда',
-        content: 'Установите минимальный и максимальный процент спреда, передвигая ползунки.',
+        content: 'Установите минимальный или максимальный процент спреда, передвигая ползунки.',
         position: 'right',
         action: 'input',
         actionTarget: '#spreadMin, #spreadMax',
@@ -63,22 +65,23 @@ const tutorialSteps = [
     
     // Шаг 5: Просмотр карточек пар
     {
-        target: '.heatmap-view.active',
-        title: 'Карточки торговых пар',
-        content: 'Здесь отображаются пары с возможностью арбитража. Цвет карточки указывает на величину спреда - чем "горячее", тем выше процент.',
-        position: 'top',
+        target: '.stats',  // Уточненный селектор - теперь статистика вместо всего view
+        title: 'Статистика торговых пар',
+        content: 'Здесь отображается количество доступных пар, максимальный спред и общий объем.',
+        position: 'bottom',
         action: 'next',
         mobileAdjust: false
     },
     
     // Шаг 6: Открытие деталей пары
     {
-        target: '.heatmap-view.active > div:first-child',
+        target: '.heatmap-view.active > div:first-child',  // Первый элемент в активном виде
         title: 'Детали пары',
-        content: 'Нажмите на карточку, чтобы увидеть подробную информацию о торговой паре.',
+        content: 'Нажмите на первую карточку, чтобы увидеть подробную информацию о торговой паре.',
         position: 'top',
         action: 'click',
-        mobileAdjust: false
+        mobileAdjust: false,
+        beforeShow: ensureFirstPairVisible  // Убедимся, что первая пара видна
     },
     
     // Шаг 7: Панель деталей - действия
@@ -97,7 +100,7 @@ const tutorialSteps = [
     {
         target: '#detailsPinBtn',
         title: 'Закрепление пары',
-        content: 'Нажмите эту кнопку, чтобы закрепить интересующую пару. Закрепленные пары выделяются в списке и всегда отображаются первыми.',
+        content: 'Нажмите эту кнопку, чтобы закрепить интересующую пару. Закрепленные пары выделяются в списке и всегда показываются первыми в результатах.',
         position: 'top',
         action: 'click',
         mobileAdjust: true,
@@ -114,7 +117,19 @@ const tutorialSteps = [
         mobileAdjust: false
     },
     
-    // Шаг 10: Настройка автообновления
+    // Шаг 10: Просмотр закрепленной пары
+    {
+        target: '.pinned:first-child', // Первая закрепленная пара
+        title: 'Закрепленная пара',
+        content: 'Закрепленные пары отмечаются специальным образом и показываются выше остальных в списке результатов.',
+        position: 'top',
+        action: 'next',
+        beforeShow: ensureFirstPinnedPairVisible, // Убедимся, что закрепленная пара видна
+        waitForElement: '.pinned', // Дождемся появления закрепленных пар
+        mobileAdjust: false
+    },
+    
+    // Шаг 11: Настройка автообновления
     {
         target: '.interval-options',
         title: 'Интервал обновления',
@@ -122,32 +137,121 @@ const tutorialSteps = [
         position: 'right',
         action: 'click',
         actionTarget: '.interval-btn:not(.active)',
+        highlightActionTargets: true,
         mobileAdjust: true,
         mobileCallback: openMobileFilters
     },
     
-    // Шаг 11: Сортировка
+    // Шаг 12: Сортировка
     {
         target: '.sort-options',
         title: 'Сортировка данных',
-        content: 'Выберите, как сортировать данные. Попробуйте изменить сортировку.',
+        content: 'Выберите, как сортировать данные. Попробуйте изменить сортировку, нажав на любую другую кнопку.',
         position: 'right',
         action: 'click',
         actionTarget: '.sort-btn:not(.active)',
+        highlightActionTargets: true,
         mobileAdjust: true,
         mobileCallback: openMobileFilters
     },
     
-    // Шаг 12: Завершение
+    // Шаг 13: Завершение
     {
-        target: '.app-header',
+        target: '.tutorial-button',
         title: 'Поздравляем!',
-        content: 'Вы успешно прошли обучение и теперь готовы использовать CEX-CEX Scan для поиска лучших арбитражных возможностей!',
-        position: 'bottom',
+        content: 'Вы успешно прошли обучение! Эта кнопка позволит вам пройти обучение заново в любой момент.',
+        position: 'top',
         action: 'next',
         mobileAdjust: false
     }
 ];
+
+// Функция для обеспечения видимости первой пары
+function ensureFirstPairVisible() {
+    // Получаем текущий активный вид
+    const activeView = document.querySelector('.heatmap-view.active');
+    if (!activeView) return;
+    
+    // Выбираем первый элемент в зависимости от текущего вида
+    let firstElement;
+    
+    if (activeView.id === 'treemapView') {
+        firstElement = activeView.querySelector('.heatmap-tile');
+    } else if (activeView.id === 'gridView') {
+        firstElement = activeView.querySelector('.grid-card');
+    } else if (activeView.id === 'listView') {
+        firstElement = activeView.querySelector('tbody tr');
+    }
+    
+    if (firstElement) {
+        // Прокручиваем до элемента
+        firstElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return true;
+    }
+    
+    return false;
+}
+
+// Функция для обеспечения видимости первой закрепленной пары
+function ensureFirstPinnedPairVisible() {
+    // Имитируем задержку для подгрузки пар
+    return new Promise(resolve => {
+        setTimeout(() => {
+            // Получаем текущий активный вид
+            const activeView = document.querySelector('.heatmap-view.active');
+            if (!activeView) {
+                resolve(false);
+                return;
+            }
+            
+            // Находим первую закрепленную пару
+            let pinnedElement;
+            
+            if (activeView.id === 'treemapView') {
+                pinnedElement = activeView.querySelector('.heatmap-tile.pinned');
+            } else if (activeView.id === 'gridView') {
+                pinnedElement = activeView.querySelector('.grid-card.pinned');
+            } else if (activeView.id === 'listView') {
+                pinnedElement = activeView.querySelector('tbody tr.pinned');
+            }
+            
+            // Если нет закрепленных пар, переходим к следующему шагу
+            if (!pinnedElement) {
+                // Попробуем найти любую пару
+                console.warn('Закрепленная пара не найдена, ищем любую пару');
+                ensureFirstPairVisible();
+                resolve(false);
+                return;
+            }
+            
+            // Прокручиваем к закрепленной паре
+            pinnedElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // Выделяем закрепленную пару
+            pinnedElement.classList.add('highlight-tutorial');
+            setTimeout(() => {
+                pinnedElement.classList.remove('highlight-tutorial');
+            }, 2000);
+            
+            resolve(true);
+        }, 800); // Даем время на обновление интерфейса
+    });
+}
+
+// Вспомогательные функции для мобильных устройств
+function openMobileFilters() {
+    const filterPanel = document.querySelector('.filter-panel');
+    const filterOverlay = document.querySelector('.filter-overlay');
+    
+    if (filterPanel && !filterPanel.classList.contains('active')) {
+        filterPanel.classList.add('active');
+        if (filterOverlay) filterOverlay.classList.add('active');
+        
+        // Задержка для анимации открытия
+        return 300;
+    }
+    return 0;
+}
 
 // Основные функции модуля
 export function initializeTutorial() {
@@ -177,12 +281,7 @@ export function initializeTutorial() {
         tutorialState.isMobile = window.innerWidth <= 768;
         if (tutorialState.isActive) {
             // Перепозиционирование элементов обучения
-            const currentStep = tutorialSteps[tutorialState.currentStep];
-            const targetElement = document.querySelector(currentStep.target);
-            if (targetElement) {
-                highlightElement(targetElement, currentStep);
-                repositionTooltip();
-            }
+            updateTutorialUI();
         }
     });
 }
@@ -198,21 +297,6 @@ export function startTutorial() {
     
     // Показ первого шага
     showTutorialStep(0);
-}
-
-// Вспомогательные функции для мобильных устройств
-function openMobileFilters() {
-    const filterPanel = document.querySelector('.filter-panel');
-    const filterOverlay = document.querySelector('.filter-overlay');
-    
-    if (filterPanel && !filterPanel.classList.contains('active')) {
-        filterPanel.classList.add('active');
-        if (filterOverlay) filterOverlay.classList.add('active');
-        
-        // Задержка для анимации открытия
-        return 300;
-    }
-    return 0;
 }
 
 // Добавление кнопки запуска обучения
@@ -354,11 +438,24 @@ function addTutorialStyles() {
             background-color: rgba(255, 255, 255, 0.05);
         }
         
+        /* Подсветка элемента во время обучения */
+        .highlight-tutorial {
+            position: relative;
+            z-index: 10000;
+            animation: pulse-border 1.5s infinite;
+        }
+        
         /* Анимации */
         @keyframes pulse {
             0% { box-shadow: 0 0 0 0 rgba(41, 98, 255, 0.4), 0 0 0 9999px rgba(0, 0, 0, 0.7); }
             70% { box-shadow: 0 0 0 10px rgba(41, 98, 255, 0), 0 0 0 9999px rgba(0, 0, 0, 0.7); }
             100% { box-shadow: 0 0 0 0 rgba(41, 98, 255, 0), 0 0 0 9999px rgba(0, 0, 0, 0.7); }
+        }
+        
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(41, 98, 255, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(41, 98, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(41, 98, 255, 0); }
         }
         
         .tutorial-spotlight.pulse {
@@ -446,6 +543,16 @@ async function showTutorialStep(stepIndex) {
         await waitForElement(step.waitForElement);
     }
     
+    // Если есть предварительная функция обработки
+    if (step.beforeShow) {
+        const result = await Promise.resolve(step.beforeShow());
+        if (result === false) {
+            console.warn(`Пропуск шага ${stepIndex} из-за beforeShow возвращает false`);
+            showTutorialStep(stepIndex + 1);
+            return;
+        }
+    }
+    
     // Если на мобильных нужны дополнительные действия
     let delay = 0;
     if (tutorialState.isMobile && step.mobileAdjust && step.mobileCallback) {
@@ -453,24 +560,114 @@ async function showTutorialStep(stepIndex) {
     }
     
     // Задержка для мобильных действий
-    setTimeout(() => {
-        const targetElement = document.querySelector(step.target);
+    setTimeout(async () => {
+        let targetElements = [];
         
-        if (!targetElement) {
+        // Получение целевого элемента(ов)
+        if (step.highlightActionTargets && step.actionTarget) {
+            // Если нужно подсветить элементы действия
+            targetElements = Array.from(document.querySelectorAll(step.actionTarget));
+        } else {
+            // Иначе используем основной целевой элемент
+            const mainTarget = document.querySelector(step.target);
+            if (mainTarget) {
+                targetElements = [mainTarget];
+            }
+        }
+        
+        if (targetElements.length === 0) {
             console.warn(`Не найден элемент для шага обучения: ${step.target}`);
-            showTutorialStep(stepIndex + 1);
+            
+            // Пробуем следующий шаг после небольшой задержки
+            setTimeout(() => {
+                showTutorialStep(stepIndex + 1);
+            }, 500);
+            
             return;
         }
         
-        // Подсвечиваем элемент
-        highlightElement(targetElement, step);
+        // Берем первый элемент для центрирования
+        const primaryElement = targetElements[0];
+        
+        // Прокручиваем страницу к элементу
+        scrollToElement(primaryElement);
+        
+        // Даем время на прокрутку
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Подсвечиваем элемент(ы)
+        if (targetElements.length === 1) {
+            highlightElement(primaryElement, step);
+        } else {
+            // Если есть несколько элементов, подсвечиваем их все
+            highlightMultipleElements(targetElements, step);
+        }
         
         // Показываем тултип
-        showTooltip(targetElement, step);
+        showTooltip(primaryElement, step);
         
         // Настраиваем действие для завершения шага
         setupStepAction(step, stepIndex);
     }, delay);
+}
+
+// Функция для прокрутки к элементу
+function scrollToElement(element) {
+    // Получаем позицию элемента
+    const rect = element.getBoundingClientRect();
+    const isInViewport = (
+        rect.top >= 0 &&
+        rect.left >= 0 &&
+        rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+        rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+    );
+    
+    // Если элемент не полностью видим, прокручиваем к нему
+    if (!isInViewport) {
+        element.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+        });
+    }
+}
+
+// Обновление UI обучения (при изменении размера окна и т.д.)
+function updateTutorialUI() {
+    const step = tutorialSteps[tutorialState.currentStep];
+    
+    // Получаем целевые элементы
+    let targetElements = [];
+    
+    if (step.highlightActionTargets && step.actionTarget) {
+        targetElements = Array.from(document.querySelectorAll(step.actionTarget));
+    } else {
+        const mainTarget = document.querySelector(step.target);
+        if (mainTarget) {
+            targetElements = [mainTarget];
+        }
+    }
+    
+    if (targetElements.length === 0) return;
+    
+    // Прокручиваем к первому элементу
+    scrollToElement(targetElements[0]);
+    
+    // Обновляем подсветку
+    if (targetElements.length === 1) {
+        highlightElement(targetElements[0], step);
+    } else {
+        highlightMultipleElements(targetElements, step);
+    }
+    
+    // Обновляем позицию тултипа
+    const tooltip = document.querySelector('.tutorial-tooltip');
+    if (tooltip) {
+        const position = tutorialState.isMobile && step.mobileAdjust && step.mobilePosition 
+                        ? step.mobilePosition 
+                        : step.position;
+                        
+        positionTooltip(tooltip, targetElements[0], position);
+    }
 }
 
 // Ожидание появления элемента
@@ -542,11 +739,14 @@ function highlightElement(element, step) {
     
     const rect = element.getBoundingClientRect();
     
+    // Добавляем немного отступа для лучшей видимости
+    const padding = 4;
+    
     // Позиция и размеры подсветки
-    spotlight.style.top = `${rect.top}px`;
-    spotlight.style.left = `${rect.left}px`;
-    spotlight.style.width = `${rect.width}px`;
-    spotlight.style.height = `${rect.height}px`;
+    spotlight.style.top = `${rect.top - padding}px`;
+    spotlight.style.left = `${rect.left - padding}px`;
+    spotlight.style.width = `${rect.width + padding * 2}px`;
+    spotlight.style.height = `${rect.height + padding * 2}px`;
     
     // Добавляем эффект пульсации, если это нужно
     spotlight.classList.toggle('pulse', step.action === 'click');
@@ -558,6 +758,43 @@ function highlightElement(element, step) {
         element.style.zIndex = '10000';
         element.style.pointerEvents = 'auto';
     }
+}
+
+// Подсветка нескольких элементов
+function highlightMultipleElements(elements, step) {
+    const spotlight = document.querySelector('.tutorial-spotlight');
+    if (!spotlight) return;
+    
+    // Если элементов нет, скрываем подсветку
+    if (elements.length === 0) {
+        spotlight.style.display = 'none';
+        return;
+    }
+    
+    // Используем первый элемент как основу для подсветки
+    const firstRect = elements[0].getBoundingClientRect();
+    
+    // Делаем все элементы кликабельными
+    elements.forEach(element => {
+        if (step.action === 'click' || step.action === 'input') {
+            element.style.position = 'relative';
+            element.style.zIndex = '10000';
+            element.style.pointerEvents = 'auto';
+        }
+    });
+    
+    // Устанавливаем подсветку на первый элемент
+    const padding = 4;
+    
+    spotlight.style.top = `${firstRect.top - padding}px`;
+    spotlight.style.left = `${firstRect.left - padding}px`;
+    spotlight.style.width = `${firstRect.width + padding * 2}px`;
+    spotlight.style.height = `${firstRect.height + padding * 2}px`;
+    
+    // Добавляем эффект пульсации
+    spotlight.classList.toggle('pulse', step.action === 'click');
+    spotlight.style.pointerEvents = 'none';
+    spotlight.style.display = 'block';
 }
 
 // Показ тултипа
@@ -647,21 +884,6 @@ function positionTooltip(tooltip, targetElement, position) {
     tooltip.style.visibility = 'visible';
 }
 
-// Перепозиционирование тултипа при изменении размера окна
-function repositionTooltip() {
-    const tooltip = document.querySelector('.tutorial-tooltip');
-    const step = tutorialSteps[tutorialState.currentStep];
-    const targetElement = document.querySelector(step.target);
-    
-    if (tooltip && targetElement) {
-        const position = tutorialState.isMobile && step.mobileAdjust && step.mobilePosition 
-                        ? step.mobilePosition 
-                        : step.position;
-                        
-        positionTooltip(tooltip, targetElement, position);
-    }
-}
-
 // Настройка действия для завершения шага
 function setupStepAction(step, stepIndex) {
     if (step.action === 'next') return;
@@ -736,4 +958,24 @@ export function isTutorialCompleted() {
 
 export function getCurrentTutorialStep() {
     return tutorialState.currentStep;
+}
+
+// Функция для возможности внешнего вызова перезапуска туториала
+export function resetTutorialProgress() {
+    tutorialState.completedTutorial = false;
+    
+    const currentUser = getCurrentUser();
+    if (currentUser && currentUser.telegram_id) {
+        // Сохраняем в настройках пользователя
+        const updatedSettings = {
+            ...(currentUser.settings || {}),
+            completed_tutorial: false
+        };
+        
+        dataService.updateUserSettings(currentUser.telegram_id, updatedSettings).catch(error => {
+            console.error('Ошибка при сбросе прогресса обучения:', error);
+        });
+    }
+    
+    showNotification('Прогресс обучения сброшен. Вы можете пройти обучение снова.', 'info');
 }
