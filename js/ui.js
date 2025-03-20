@@ -648,7 +648,7 @@ export function renderPurchaseLicenseMessage(container) {
     const purchaseBtn = document.getElementById('purchaseLicenseBtn');
     if (purchaseBtn) {
         purchaseBtn.addEventListener('click', function() {
-            window.open('https://t.me/example_bot');
+            window.open('https://t.me/CEXscan_bot');
         });
     }
     
