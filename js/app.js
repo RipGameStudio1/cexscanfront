@@ -6,6 +6,7 @@
 import { api } from './api.js';
 import { dataService } from './data-service.js';
 import { initializeUser, getCurrentUser, hasAccessToTradingPairs } from './auth.js';
+import { initializeTutorial } from './tutorial.js';
 import { 
     setupDOMElements, 
     setupEventListeners, 
@@ -192,6 +193,8 @@ async function initializeApp() {
         
         // Анализ URL параметров (если нужно)
         handleUrlParameters();
+         // Инициализация модуля обучения (после всех остальных модулей)
+        initializeTutorial();
         
     } catch (error) {
         console.error('❌ Error initializing application:', error);
