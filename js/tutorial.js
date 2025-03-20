@@ -1,30 +1,34 @@
-// tutorial.js - Модуль интерактивного обучения
+// tutorial.js - Полностью переработанный модуль интерактивного обучения
 import { getCurrentUser } from './auth.js';
 import { showNotification } from './ui.js';
 import { dataService } from './data-service.js';
 
 // Состояние обучения
 let tutorialState = {
-    isActive: false,        // Активно ли обучение сейчас
-    currentStep: 0,         // Текущий шаг обучения
-    stepCompleted: false,   // Выполнен ли текущий шаг
-    userId: null,           // ID пользователя для сохранения прогресса
-    isMobile: false,        // Мобильное ли устройство
-    completedTutorial: false, // Завершил ли пользователь обучение ранее
-    highlightedElements: [], // Массив для отслеживания подсвеченных элементов
-    scrollHandler: null      // Обработчик прокрутки для обновления позиций
+    isActive: false,
+    currentStep: 0,
+    stepCompleted: false,
+    userId: null,
+    isMobile: false,
+    completedTutorial: false,
+    highlightedElements: [],
+    scrollHandler: null,
+    originalUpdate: null,      // Храним оригинальную функцию обновления данных
+    autoUpdateStopped: false,  // Флаг остановки автообновления
+    initialData: null          // Сохраненные данные пар при начале обучения
 };
 
 // Определение шагов обучения - интерактивные задачи
 const tutorialSteps = [
     // Шаг 1: Приветствие и знакомство с интерфейсом
     {
-        target: '.logo',  // Уточненный селектор - теперь логотип вместо всего хедера
+        target: '.logo',
         title: 'Добро пожаловать в CEX-CEX Scan!',
         content: 'Это приложение поможет вам найти арбитражные возможности между криптовалютными биржами. Давайте познакомимся с интерфейсом!',
         position: 'bottom',
         action: 'next',
-        mobileAdjust: false
+        mobileAdjust: false,
+        requiresFilterPanel: false
     },
     
     // Шаг 2: Режимы просмотра
@@ -35,9 +39,10 @@ const tutorialSteps = [
         position: 'bottom',
         action: 'click',
         actionTarget: '.view-btn:not(.active)',
-        highlightActionTargets: true,  // Подсвечиваем только цели действия
+        highlightActionTargets: true,
         mobileAdjust: true,
-        mobilePosition: 'bottom'
+        mobilePosition: 'bottom',
+        requiresFilterPanel: false
     },
     
     // Шаг 3: Фильтрация по монетам
@@ -47,10 +52,11 @@ const tutorialSteps = [
         content: 'Выберите интересующие вас монеты, нажав на любую неактивную монету из списка.',
         position: 'right',
         action: 'click',
-        actionTarget: '.coin-tag:not(.active):not(.all-coins-btn)',  // Уточненный селектор
-        highlightActionTargets: true,  // Подсвечиваем только цели действия
+        actionTarget: '.coin-tag:not(.active):not(.all-coins-btn)',
+        highlightActionTargets: true,
         mobileAdjust: true,
-        mobileCallback: openMobileFilters
+        mobileCallback: openMobileFilters,
+        requiresFilterPanel: true
     },
     
     // Шаг 4: Настройка диапазона спреда
@@ -62,28 +68,32 @@ const tutorialSteps = [
         action: 'input',
         actionTarget: '#spreadMin, #spreadMax',
         mobileAdjust: true,
-        mobileCallback: openMobileFilters
+        mobileCallback: openMobileFilters,
+        requiresFilterPanel: true
     },
     
     // Шаг 5: Просмотр карточек пар
     {
-        target: '.stats',  // Уточненный селектор - теперь статистика вместо всего view
+        target: '.stats',
         title: 'Статистика торговых пар',
         content: 'Здесь отображается количество доступных пар, максимальный спред и общий объем.',
         position: 'bottom',
         action: 'next',
-        mobileAdjust: false
+        mobileAdjust: false,
+        requiresFilterPanel: false,
+        beforeShow: closeFilterPanel
     },
     
     // Шаг 6: Открытие деталей пары
     {
-        target: '.heatmap-view.active > div:first-child',  // Первый элемент в активном виде
+        target: '.heatmap-view.active > div:first-child',
         title: 'Детали пары',
         content: 'Нажмите на первую карточку, чтобы увидеть подробную информацию о торговой паре.',
         position: 'top',
         action: 'click',
         mobileAdjust: false,
-        beforeShow: ensureFirstPairVisible  // Убедимся, что первая пара видна
+        requiresFilterPanel: false,
+        beforeShow: ensureFirstPairVisible
     },
     
     // Шаг 7: Панель деталей - действия
@@ -95,7 +105,8 @@ const tutorialSteps = [
         action: 'next',
         waitForElement: '.details-panel.active',
         mobileAdjust: true,
-        mobilePosition: 'top'
+        mobilePosition: 'top',
+        requiresFilterPanel: false
     },
     
     // Шаг 8: Закрепление пары
@@ -106,7 +117,8 @@ const tutorialSteps = [
         position: 'top',
         action: 'click',
         mobileAdjust: true,
-        mobilePosition: 'top'
+        mobilePosition: 'top',
+        requiresFilterPanel: false
     },
     
     // Шаг 9: Закрытие деталей
@@ -115,23 +127,12 @@ const tutorialSteps = [
         title: 'Закрытие панели',
         content: 'Закройте панель деталей, чтобы вернуться к списку пар.',
         position: 'right',
-        action: 'click',
-        mobileAdjust: false
+        action: 'click-special',  // Специальная обработка для этого шага
+        mobileAdjust: false,
+        requiresFilterPanel: false
     },
     
-    // Шаг 10: Просмотр закрепленной пары
-    {
-        target: '.pinned:first-child', // Первая закрепленная пара
-        title: 'Закрепленная пара',
-        content: 'Закрепленные пары отмечаются специальным образом и показываются выше остальных в списке результатов.',
-        position: 'top',
-        action: 'next',
-        beforeShow: ensureFirstPinnedPairVisible, // Убедимся, что закрепленная пара видна
-        waitForElement: '.pinned', // Дождемся появления закрепленных пар
-        mobileAdjust: false
-    },
-    
-    // Шаг 11: Настройка автообновления
+    // Шаг 10: Настройка автообновления
     {
         target: '.interval-options',
         title: 'Интервал обновления',
@@ -141,10 +142,12 @@ const tutorialSteps = [
         actionTarget: '.interval-btn:not(.active)',
         highlightActionTargets: true,
         mobileAdjust: true,
-        mobileCallback: openMobileFilters
+        mobileCallback: openMobileFilters,
+        requiresFilterPanel: true,
+        beforeShow: openFilterPanel
     },
     
-    // Шаг 12: Сортировка
+    // Шаг 11: Сортировка
     {
         target: '.sort-options',
         title: 'Сортировка данных',
@@ -154,89 +157,76 @@ const tutorialSteps = [
         actionTarget: '.sort-btn:not(.active)',
         highlightActionTargets: true,
         mobileAdjust: true,
-        mobileCallback: openMobileFilters
+        mobileCallback: openMobileFilters,
+        requiresFilterPanel: true
     },
     
-    // Шаг 13: Завершение
+    // Шаг 12: Завершение
     {
         target: '.tutorial-button',
         title: 'Поздравляем!',
         content: 'Вы успешно прошли обучение! Эта кнопка позволит вам пройти обучение заново в любой момент.',
         position: 'top',
         action: 'next',
-        mobileAdjust: false
+        mobileAdjust: false,
+        requiresFilterPanel: true
     }
 ];
 
-// Функция для обеспечения видимости первой пары
-function ensureFirstPairVisible() {
-    // Получаем текущий активный вид
-    const activeView = document.querySelector('.heatmap-view.active');
-    if (!activeView) return;
+// Функция закрытия панели фильтров
+function closeFilterPanel() {
+    const filterPanel = document.querySelector('.filter-panel');
+    const filterOverlay = document.querySelector('.filter-overlay');
     
-    // Выбираем первый элемент в зависимости от текущего вида
-    let firstElement;
-    
-    if (activeView.id === 'treemapView') {
-        firstElement = activeView.querySelector('.heatmap-tile');
-    } else if (activeView.id === 'gridView') {
-        firstElement = activeView.querySelector('.grid-card');
-    } else if (activeView.id === 'listView') {
-        firstElement = activeView.querySelector('tbody tr');
+    if (filterPanel && filterPanel.classList.contains('active')) {
+        filterPanel.classList.remove('active');
+        if (filterOverlay) filterOverlay.classList.remove('active');
+        return new Promise(resolve => setTimeout(resolve, 300));
     }
     
-    if (firstElement) {
-        // Прокручиваем до элемента
-        firstElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return true;
-    }
-    
-    return false;
+    return Promise.resolve();
 }
 
-// Функция для обеспечения видимости первой закрепленной пары
-function ensureFirstPinnedPairVisible() {
-    // Имитируем задержку для подгрузки пар
-    return new Promise(resolve => {
-        setTimeout(() => {
-            // Получаем текущий активный вид
-            const activeView = document.querySelector('.heatmap-view.active');
-            if (!activeView) {
-                resolve(false);
-                return;
-            }
-            
-            // Находим первую закрепленную пару
-            let pinnedElement;
-            
-            if (activeView.id === 'treemapView') {
-                pinnedElement = activeView.querySelector('.heatmap-tile.pinned');
-            } else if (activeView.id === 'gridView') {
-                pinnedElement = activeView.querySelector('.grid-card.pinned');
-            } else if (activeView.id === 'listView') {
-                pinnedElement = activeView.querySelector('tbody tr.pinned');
-            }
-            
-            // Если нет закрепленных пар, переходим к следующему шагу
-            if (!pinnedElement) {
-                // Попробуем найти любую пару
-                console.warn('Закрепленная пара не найдена, ищем любую пару');
-                ensureFirstPairVisible();
-                resolve(false);
-                return;
-            }
-            
-            // Прокручиваем к закрепленной паре
-            pinnedElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
-            // Выделяем закрепленную пару
-            pinnedElement.classList.add('highlight-tutorial');
-            setTimeout(() => {
-                pinnedElement.classList.remove('highlight-tutorial');
-            }, 2000);
-            
-            resolve(true);
-        }, 800); // Даем время на обновление интерфейса
+// Функция открытия панели фильтров
+function openFilterPanel() {
+    const filterPanel = document.querySelector('.filter-panel');
+    const filterOverlay = document.querySelector('.filter-overlay');
+    
+    if (filterPanel && !filterPanel.classList.contains('active')) {
+        filterPanel.classList.add('active');
+        if (filterOverlay) filterOverlay.classList.add('active');
+        return new Promise(resolve => setTimeout(resolve, 300));
+    }
+    
+    return Promise.resolve();
+}
+
+// Функция для обеспечения видимости первой пары
+function ensureFirstPairVisible() {
+    // Сначала закрываем панель фильтров, если она открыта
+    return closeFilterPanel().then(() => {
+        // Получаем текущий активный вид
+        const activeView = document.querySelector('.heatmap-view.active');
+        if (!activeView) return false;
+        
+        // Выбираем первый элемент в зависимости от текущего вида
+        let firstElement;
+        
+        if (activeView.id === 'treemapView') {
+            firstElement = activeView.querySelector('.heatmap-tile');
+        } else if (activeView.id === 'gridView') {
+            firstElement = activeView.querySelector('.grid-card');
+        } else if (activeView.id === 'listView') {
+            firstElement = activeView.querySelector('tbody tr');
+        }
+        
+        if (firstElement) {
+            // Прокручиваем до элемента
+            firstElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return new Promise(resolve => setTimeout(() => resolve(true), 500));
+        }
+        
+        return false;
     });
 }
 
@@ -249,10 +239,10 @@ function openMobileFilters() {
         filterPanel.classList.add('active');
         if (filterOverlay) filterOverlay.classList.add('active');
         
-        // Задержка для анимации открытия
-        return 300;
+        // Возвращаем промис, чтобы дождаться завершения анимации
+        return new Promise(resolve => setTimeout(resolve, 300));
     }
-    return 0;
+    return Promise.resolve();
 }
 
 // Функция debounce для оптимизации частых вызовов
@@ -266,6 +256,53 @@ function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
     };
+}
+
+// Остановка автообновления данных на время обучения
+function stopAutoUpdate() {
+    if (tutorialState.autoUpdateStopped) return;
+    
+    try {
+        // Сохраняем текущие данные
+        import('./data-manager.js').then(DataManager => {
+            // Сохраняем оригинальную функцию обновления
+            if (window.updateInterval) {
+                clearInterval(window.updateInterval);
+                window.updateInterval = null;
+                tutorialState.autoUpdateStopped = true;
+                console.log('Автообновление данных временно остановлено для обучения');
+            }
+            
+            // Сохраняем текущие данные
+            tutorialState.initialData = {
+                pairsData: DataManager.getPairsData ? [...DataManager.getPairsData()] : [],
+                filteredPairsData: DataManager.getFilteredPairsData ? [...DataManager.getFilteredPairsData()] : []
+            };
+        });
+    } catch (e) {
+        console.error('Ошибка при остановке автообновления:', e);
+    }
+}
+
+// Восстановление автообновления данных
+function restoreAutoUpdate() {
+    if (!tutorialState.autoUpdateStopped) return;
+    
+    try {
+        import('./data-manager.js').then(DataManager => {
+            // Восстанавливаем автообновление с последним интервалом
+            const intervalBtn = document.querySelector('.interval-btn.active');
+            const interval = intervalBtn ? parseInt(intervalBtn.dataset.interval) : 10;
+            
+            if (interval > 0 && DataManager.startAutoUpdate) {
+                DataManager.startAutoUpdate(interval);
+                tutorialState.autoUpdateStopped = false;
+                console.log('Автообновление данных восстановлено');
+            }
+        });
+    } catch (e) {
+        console.error('Ошибка при восстановлении автообновления:', e);
+    }
 }
 
 // Основные функции модуля
@@ -288,7 +325,7 @@ export function initializeTutorial() {
         // Небольшая задержка, чтобы интерфейс успел загрузиться
         setTimeout(() => {
             startTutorial();
-        }, 1500);
+        }, 2000);
     }
     
     // Отслеживание изменения размера окна
@@ -301,11 +338,17 @@ export function initializeTutorial() {
 }
 
 export function startTutorial() {
+    // Проверяем, не активно ли уже обучение
+    if (tutorialState.isActive) return;
+    
     // Сброс состояния
     tutorialState.isActive = true;
     tutorialState.currentStep = 0;
     tutorialState.stepCompleted = false;
     tutorialState.highlightedElements = [];
+    
+    // Останавливаем автообновление данных
+    stopAutoUpdate();
     
     // Создание UI обучения
     createTutorialUI();
@@ -322,16 +365,46 @@ export function restartTutorial() {
     // Полностью очищаем UI обучения
     removeTutorialUI();
     
+    // Восстанавливаем автообновление данных
+    restoreAutoUpdate();
+    
     // Сбрасываем состояние
     tutorialState.isActive = false;
     tutorialState.currentStep = 0;
     tutorialState.stepCompleted = false;
     tutorialState.highlightedElements = [];
     
+    // Полное восстановление интерфейса
+    forceResetUI();
+    
     // Небольшая задержка для гарантии очистки
     setTimeout(() => {
         startTutorial();
     }, 500);
+}
+
+// Принудительный сброс UI
+function forceResetUI() {
+    try {
+        // Закрываем панель фильтров
+        closeFilterPanel();
+        
+        // Закрываем панель деталей
+        const detailsPanel = document.querySelector('.details-panel');
+        if (detailsPanel && detailsPanel.classList.contains('active')) {
+            detailsPanel.classList.remove('active');
+            
+            const mainContent = document.querySelector('.main-content');
+            if (mainContent) {
+                mainContent.classList.remove('details-open');
+            }
+        }
+        
+        // Восстанавливаем стили всех элементов
+        restoreUIState();
+    } catch (e) {
+        console.error('Ошибка при сбросе UI:', e);
+    }
 }
 
 // Добавляем обработчик прокрутки для обновления позиций элементов обучения
@@ -432,22 +505,22 @@ function addTutorialStyles() {
             left: 0;
             right: 0;
             bottom: 0;
-            background-color: rgba(0, 0, 0, 0.5);
+            background-color: rgba(0, 0, 0, 0.7);
             z-index: 9998 !important;
-            pointer-events: none !important;
+            pointer-events: all !important;
         }
         
         .tutorial-spotlight {
-            position: absolute;
+            position: fixed;
             box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7);
             border-radius: 4px;
-            pointer-events: none;
+            pointer-events: none !important;
             z-index: 9999 !important;
             transition: all 0.3s ease;
         }
         
         .tutorial-tooltip {
-            position: absolute;
+            position: fixed;
             background-color: var(--bg-secondary);
             border-radius: var(--border-radius);
             box-shadow: var(--shadow-md);
@@ -507,9 +580,16 @@ function addTutorialStyles() {
         
         /* Подсветка элемента во время обучения */
         .highlight-tutorial {
-            position: relative;
-            z-index: 10000;
+            position: relative !important;
+            z-index: 10000 !important;
             animation: pulse-border 1.5s infinite;
+        }
+        
+        /* Делаем активные элементы видимыми через оверлей */
+        .tutorial-active-element {
+            position: relative !important;
+            z-index: 10000 !important;
+            pointer-events: auto !important;
         }
         
         /* Анимации */
@@ -535,10 +615,26 @@ function addTutorialStyles() {
             opacity: 0;
         }
         
-        /* Нормализация z-index */
-        .view-controls {
-            position: relative;
-            z-index: 1;  /* Низкий z-index в обычном состоянии */
+        /* Нормализация z-index после обучения */
+        body.tutorial-active .filter-panel {
+            position: relative !important;
+            z-index: 10000 !important;
+        }
+        
+        body.tutorial-active .view-controls {
+            position: relative !important;
+            z-index: 10000 !important;
+        }
+        
+        body.tutorial-active .details-panel.active {
+            position: fixed !important;
+            z-index: 10000 !important;
+        }
+        
+        body.tutorial-active #closeDetailsPanel {
+            position: relative !important;
+            z-index: 10002 !important;
+            pointer-events: auto !important;
         }
         
         /* Мобильные адаптации */
@@ -578,6 +674,9 @@ function createTutorialUI() {
     // Удаляем старые элементы, если они есть
     removeTutorialUI();
     
+    // Добавляем класс к body для общего стилизации
+    document.body.classList.add('tutorial-active');
+    
     // Создаем оверлей
     const overlay = document.createElement('div');
     overlay.className = 'tutorial-overlay';
@@ -604,6 +703,9 @@ function removeTutorialUI() {
     if (spotlight) spotlight.remove();
     if (tooltip) tooltip.remove();
     
+    // Удаляем класс с body
+    document.body.classList.remove('tutorial-active');
+    
     // Очищаем стили у подсвеченных элементов
     clearHighlightedElements();
     
@@ -622,24 +724,45 @@ function clearHighlightedElements() {
             element.style.zIndex = '';
             element.style.pointerEvents = '';
             element.classList.remove('highlight-tutorial');
+            element.classList.remove('tutorial-active-element');
         }
     });
     
     tutorialState.highlightedElements = [];
     
-    // Принудительно очищаем стили для view-controls
+    // Дополнительно очищаем особые элементы
+    cleanupSpecialElements();
+}
+
+// Очистка стилей у особых элементов
+function cleanupSpecialElements() {
+    // Очистка для view-controls
     const viewControls = document.querySelector('.view-controls');
     if (viewControls) {
         viewControls.style.position = '';
         viewControls.style.zIndex = '';
         
-        // Очищаем стили для дочерних элементов
         const viewButtons = viewControls.querySelectorAll('.view-btn');
         viewButtons.forEach(button => {
             button.style.position = '';
             button.style.zIndex = '';
             button.style.pointerEvents = '';
         });
+    }
+    
+    // Очистка для кнопки закрытия панели деталей
+    const closeBtn = document.getElementById('closeDetailsPanel');
+    if (closeBtn) {
+        closeBtn.style.position = '';
+        closeBtn.style.zIndex = '';
+        closeBtn.style.pointerEvents = '';
+    }
+    
+    // Очистка для панели деталей
+    const detailsPanel = document.querySelector('.details-panel');
+    if (detailsPanel) {
+        detailsPanel.style.position = '';
+        detailsPanel.style.zIndex = '';
     }
 }
 
@@ -654,7 +777,14 @@ function restoreUIState() {
         '.coin-tag',
         '.exchange-tag',
         '.all-coins-btn',
-        '.all-exchanges-btn'
+        '.all-exchanges-btn',
+        '.details-panel',
+        '#closeDetailsPanel',
+        '#detailsPinBtn',
+        '.action-btn',
+        '.heatmap-tile',
+        '.grid-card',
+        'tr'
     ];
     
     // Очищаем стили для всех этих элементов
@@ -665,6 +795,8 @@ function restoreUIState() {
                 element.style.position = '';
                 element.style.zIndex = '';
                 element.style.pointerEvents = '';
+                element.classList.remove('highlight-tutorial');
+                element.classList.remove('tutorial-active-element');
             }
         });
     });
@@ -690,6 +822,15 @@ async function showTutorialStep(stepIndex) {
         await waitForElement(step.waitForElement);
     }
     
+    // Управление панелью фильтров
+    if (step.requiresFilterPanel) {
+        await openFilterPanel();
+    } else if (stepIndex > 0 && tutorialSteps[stepIndex - 1].requiresFilterPanel) {
+        // Если предыдущий шаг требовал панель фильтров, а текущий - нет,
+        // то закрываем панель фильтров
+        await closeFilterPanel();
+    }
+    
     // Если есть предварительная функция обработки
     if (step.beforeShow) {
         const result = await Promise.resolve(step.beforeShow());
@@ -703,7 +844,7 @@ async function showTutorialStep(stepIndex) {
     // Если на мобильных нужны дополнительные действия
     let delay = 0;
     if (tutorialState.isMobile && step.mobileAdjust && step.mobileCallback) {
-        delay = step.mobileCallback();
+        delay = await step.mobileCallback();
     }
     
     // Задержка для мобильных действий
@@ -737,7 +878,7 @@ async function showTutorialStep(stepIndex) {
         const primaryElement = targetElements[0];
         
         // Прокручиваем страницу к элементу
-        scrollToElement(primaryElement);
+        await scrollToElement(primaryElement);
         
         // Даем время на прокрутку
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -753,17 +894,101 @@ async function showTutorialStep(stepIndex) {
             highlightMultipleElements(targetElements, step);
         }
         
-        // Показываем тултип
-        showTooltip(primaryElement, step);
-        
-        // Настраиваем действие для завершения шага
-        setupStepAction(step, stepIndex);
+        // Особое обращение с некоторыми элементами
+        if (step.action === 'click-special' && step.target === '#closeDetailsPanel') {
+            setupCloseDetailsPanelAction(stepIndex);
+        } else {
+            // Показываем тултип
+            showTooltip(primaryElement, step);
+            
+            // Настраиваем действие для завершения шага
+            setupStepAction(step, stepIndex);
+        }
     }, delay);
+}
+
+// Особая настройка для кнопки закрытия панели деталей
+function setupCloseDetailsPanelAction(stepIndex) {
+    const closeBtn = document.getElementById('closeDetailsPanel');
+    if (!closeBtn) return;
+    
+    // Особая подсветка для кнопки закрытия
+    closeBtn.style.position = 'relative';
+    closeBtn.style.zIndex = '10002';
+    closeBtn.style.pointerEvents = 'auto';
+    closeBtn.classList.add('tutorial-active-element');
+    closeBtn.classList.add('highlight-tutorial');
+    
+    // Устанавливаем подсветку
+    const spotlight = document.querySelector('.tutorial-spotlight');
+    if (spotlight) {
+        const rect = closeBtn.getBoundingClientRect();
+        const padding = 4;
+        
+        spotlight.style.top = `${rect.top - padding + window.scrollY}px`;
+        spotlight.style.left = `${rect.left - padding + window.scrollX}px`;
+        spotlight.style.width = `${rect.width + padding * 2}px`;
+        spotlight.style.height = `${rect.height + padding * 2}px`;
+        spotlight.classList.add('pulse');
+    }
+    
+    // Показываем тултип
+    const tooltip = document.querySelector('.tutorial-tooltip');
+    if (tooltip) {
+        const step = tutorialSteps[stepIndex];
+        
+        tooltip.innerHTML = `
+            <div class="tutorial-tooltip-title">${step.title}</div>
+            <div class="tutorial-tooltip-content">${step.content}</div>
+            <div class="tutorial-tooltip-actions">
+                <button class="tutorial-btn tutorial-skip-btn">Пропустить</button>
+                <button class="tutorial-btn tutorial-next-btn">Готово</button>
+            </div>
+        `;
+        
+        positionTooltip(tooltip, closeBtn, step.position);
+        
+        // Обработчики кнопок
+        const skipBtn = tooltip.querySelector('.tutorial-skip-btn');
+        const nextBtn = tooltip.querySelector('.tutorial-next-btn');
+        
+        skipBtn.addEventListener('click', completeTutorial);
+        
+        nextBtn.addEventListener('click', () => {
+            // Вручную закрываем панель деталей
+            const detailsPanel = document.querySelector('.details-panel');
+            if (detailsPanel) {
+                detailsPanel.classList.remove('active');
+                
+                const mainContent = document.querySelector('.main-content');
+                if (mainContent) {
+                    mainContent.classList.remove('details-open');
+                }
+            }
+            
+            // Переходим к следующему шагу
+            showTutorialStep(stepIndex + 1);
+        });
+    }
+    
+    // Добавляем обработчик клика для кнопки закрытия
+    const clickHandler = () => {
+        // Удаляем обработчик, чтобы избежать повторного срабатывания
+        closeBtn.removeEventListener('click', clickHandler);
+        
+        // Даем время для закрытия панели
+        setTimeout(() => {
+            // Переходим к следующему шагу
+            showTutorialStep(stepIndex + 1);
+        }, 500);
+    };
+    
+    closeBtn.addEventListener('click', clickHandler);
 }
 
 // Функция для прокрутки к элементу
 function scrollToElement(element) {
-    if (!element) return;
+    if (!element) return Promise.resolve();
     
     try {
         // Получаем позицию элемента
@@ -786,7 +1011,7 @@ function scrollToElement(element) {
                 inline: 'center'
             });
             
-            // На всякий случай возвращаем промис для ожидания окончания прокрутки
+            // Возвращаем промис для ожидания окончания прокрутки
             return new Promise(resolve => setTimeout(resolve, 500));
         }
     } catch (error) {
@@ -917,6 +1142,9 @@ function completeTutorial() {
         tutorialState.isActive = false;
         tutorialState.completedTutorial = true;
         
+        // Восстанавливаем автообновление данных
+        restoreAutoUpdate();
+        
         // Сохранение прогресса
         if (tutorialState.userId) {
             saveTutorialProgress();
@@ -963,13 +1191,12 @@ function highlightElement(element, step) {
     spotlight.style.height = `${rect.height + padding * 2}px`;
     
     // Добавляем эффект пульсации, если это нужно
-    spotlight.classList.toggle('pulse', step.action === 'click');
+    spotlight.classList.toggle('pulse', step.action === 'click' || step.action === 'click-special');
     
-    // Делаем элемент кликабельным, если это нужно
-    if (step.action === 'click' || step.action === 'input') {
-        spotlight.style.pointerEvents = 'none';
-        element.style.position = 'relative';
-        element.style.zIndex = '10000';
+    // Делаем элемент видимым сквозь оверлей и кликабельным, если это нужно
+    element.classList.add('tutorial-active-element');
+    
+    if (step.action === 'click' || step.action === 'input' || step.action === 'click-special') {
         element.style.pointerEvents = 'auto';
     }
 }
@@ -988,11 +1215,11 @@ function highlightMultipleElements(elements, step) {
     // Используем первый элемент как основу для подсветки
     const firstRect = elements[0].getBoundingClientRect();
     
-    // Делаем все элементы кликабельными
+    // Делаем все элементы видимыми сквозь оверлей и кликабельными, если нужно
     elements.forEach(element => {
-        if (step.action === 'click' || step.action === 'input') {
-            element.style.position = 'relative';
-            element.style.zIndex = '10000';
+        element.classList.add('tutorial-active-element');
+        
+        if (step.action === 'click' || step.action === 'input' || step.action === 'click-special') {
             element.style.pointerEvents = 'auto';
         }
     });
@@ -1006,8 +1233,7 @@ function highlightMultipleElements(elements, step) {
     spotlight.style.height = `${firstRect.height + padding * 2}px`;
     
     // Добавляем эффект пульсации
-    spotlight.classList.toggle('pulse', step.action === 'click');
-    spotlight.style.pointerEvents = 'none';
+    spotlight.classList.toggle('pulse', step.action === 'click' || step.action === 'click-special');
     spotlight.style.display = 'block';
 }
 
@@ -1038,8 +1264,11 @@ function showTooltip(targetElement, step) {
     const positions = ['top', 'bottom', 'left', 'right'];
     
     // Убеждаемся, что текущая позиция в начале списка
-    positions.splice(positions.indexOf(position), 1);
-    positions.unshift(position);
+    const posIndex = positions.indexOf(position);
+    if (posIndex > -1) {
+        positions.splice(posIndex, 1);
+        positions.unshift(position);
+    }
     
     // Проверяем каждую позицию, начиная с предпочтительной
     let bestPosition = position;
