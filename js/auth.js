@@ -5,15 +5,6 @@ import { loadUserSettings, setPairsData, setFilteredPairsData, setupSettingsSave
 
 // Глобальная переменная для текущего пользователя
 let currentUser = null;
-// Проверяем, запущены ли мы внутри iframe
-const isInIframe = window !== window.parent;
-
-// Если мы внутри iframe, получаем Telegram WebApp из родительского окна
-if (isInIframe && window.parent.Telegram && window.parent.Telegram.WebApp) {
-    console.log('Получаем Telegram WebApp из родительского окна');
-    window.Telegram = window.Telegram || {};
-    window.Telegram.WebApp = window.parent.Telegram.WebApp;
-}
 
 // Геттер и сеттер для текущего пользователя
 export function getCurrentUser() {
